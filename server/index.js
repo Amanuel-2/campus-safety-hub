@@ -6,12 +6,19 @@ require('dotenv').config();
 const incidentRoutes = require('./routes/incidents');
 const lostItemRoutes = require('./routes/lostItems');
 const authRoutes = require('./routes/auth');
+const studentRoutes = require('./routes/students');
+const emergencyRoutes = require('./routes/emergency');
 
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// Increase body size limit to handle base64 images (50MB limit)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Trust proxy for accurate IP addresses (for rate limiting)
+app.set('trust proxy', 1);
 
 
 
@@ -36,6 +43,8 @@ mongoose.connect(MONGODB_URI)
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/lost-items', lostItemRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/students', studentRoutes);
+app.use('/api/emergency', emergencyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

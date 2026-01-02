@@ -4,6 +4,7 @@ require('dotenv').config();
 const Admin = require('./models/Admin');
 const Incident = require('./models/Incident');
 const LostItem = require('./models/LostItem');
+const CampusDatabase = require('./models/CampusDatabase');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/campus_safety_hub';
 
@@ -16,7 +17,18 @@ const seedData = async () => {
     await Admin.deleteMany({});
     await Incident.deleteMany({});
     await LostItem.deleteMany({});
+    await CampusDatabase.deleteMany({});
     console.log('✓ Cleared existing data');
+
+    // Create sample campus IDs for verification
+    const sampleCampusIds = ['STU001', 'STU002', 'STU003', 'STU004', 'STU005'];
+    const campusRecords = sampleCampusIds.map(id => ({
+      campusId: id,
+      isValid: true,
+    }));
+    await CampusDatabase.insertMany(campusRecords);
+    console.log(`✓ Created ${sampleCampusIds.length} sample campus IDs for testing`);
+    console.log('   Test IDs: STU001, STU002, STU003, STU004, STU005');
 
     // Create default admin
     const admin = new Admin({

@@ -13,6 +13,17 @@ const incidentSchema = new mongoose.Schema({
     trim: true,
     maxlength: [2000, 'Description cannot exceed 2000 characters'],
   },
+  images: {
+    type: [String],  // Array of base64 encoded image data strings
+    default: [],
+    validate: {
+      validator: function(v) {
+        // Ensure it's an array and each image is a string
+        return Array.isArray(v) && v.every(img => typeof img === 'string');
+      },
+      message: 'Images must be an array of base64 strings'
+    }
+  },
   type: {
     type: String,
     required: true,
