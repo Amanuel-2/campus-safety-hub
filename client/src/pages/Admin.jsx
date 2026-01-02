@@ -17,6 +17,8 @@ const Admin = () => {
     totalLostItems: 0,
     foundItems: 0,
   });
+  const [selectedIncident, setSelectedIncident] = useState(null);
+  const [showImageModal, setShowImageModal] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -113,6 +115,19 @@ const Admin = () => {
       critical: 'badge-lost',
     };
     return classes[severity] || '';
+  };
+
+  const handleIncidentRowClick = (incident) => {
+    // Only show images if incident has images
+    if (incident.images && incident.images.length > 0) {
+      setSelectedIncident(incident);
+      setShowImageModal(true);
+    }
+  };
+
+  const closeImageModal = () => {
+    setShowImageModal(false);
+    setSelectedIncident(null);
   };
 
   const incidentStatuses = ['pending', 'investigating', 'resolved'];
@@ -247,9 +262,26 @@ const Admin = () => {
                 </thead>
                 <tbody>
                   {incidents.map((incident) => (
-                    <tr key={incident._id}>
+                    <tr 
+                      key={incident._id}
+                      className={incident.images && incident.images.length > 0 ? 'has-images' : ''}
+                      onClick={() => handleIncidentRowClick(incident)}
+                      style={{ cursor: incident.images && incident.images.length > 0 ? 'pointer' : 'default' }}
+                    >
                       <td>
-                        <div className="cell-title">{incident.title}</div>
+                        <div className="cell-title">
+                          {incident.title}
+                          {incident.images && incident.images.length > 0 && (
+                            <span className="image-badge">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                              </svg>
+                              {incident.images.length} photo{incident.images.length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
                         <div className="cell-subtitle">{incident.description.slice(0, 50)}...</div>
                       </td>
                       <td>
@@ -265,6 +297,7 @@ const Admin = () => {
                           value={incident.status}
                           onChange={(e) => updateIncidentStatus(incident._id, e.target.value)}
                           className="status-select"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {incidentStatuses.map((status) => (
                             <option key={status} value={status}>
@@ -280,7 +313,10 @@ const Admin = () => {
                       </td>
                       <td>
                         <button
-                          onClick={() => deleteIncident(incident._id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteIncident(incident._id);
+                          }}
                           className="btn btn-danger btn-sm"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -369,6 +405,48 @@ const Admin = () => {
           </div>
         )}
       </div>
+
+      {/* Image Modal */}
+      {showImageModal && selectedIncident && selectedIncident.images && selectedIncident.images.length > 0 && (
+        <div className="image-modal-overlay" onClick={closeImageModal}>
+          <div className="image-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="image-modal-header">
+              <h3 className="image-modal-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                Photos - {selectedIncident.title}
+              </h3>
+              <button onClick={closeImageModal} className="image-modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="image-modal-content">
+              <div className="image-grid">
+                {selectedIncident.images.map((image, index) => (
+                  <div key={index} className="image-item">
+                    <img 
+                      src={image} 
+                      alt={`Photo ${index + 1} of ${selectedIncident.images.length}`}
+                      onClick={() => {
+                        // Open image in new tab for full size
+                        const newWindow = window.open();
+                        newWindow.document.write(`<img src="${image}" style="max-width: 100%; height: auto;" />`);
+                      }}
+                    />
+                    <div className="image-number">{index + 1} / {selectedIncident.images.length}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .admin-header {
@@ -480,6 +558,31 @@ const Admin = () => {
           font-weight: 500;
           color: var(--text-primary);
           margin-bottom: 0.25rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        
+        .image-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.125rem 0.5rem;
+          background: rgba(78, 205, 196, 0.15);
+          border: 1px solid rgba(78, 205, 196, 0.3);
+          border-radius: var(--radius-full);
+          color: var(--accent-secondary);
+          font-size: 0.75rem;
+          font-weight: 500;
+        }
+        
+        .image-badge svg {
+          width: 12px;
+          height: 12px;
+        }
+        
+        tr.has-images:hover {
+          background: rgba(78, 205, 196, 0.05);
         }
         
         .cell-subtitle {
@@ -555,6 +658,146 @@ const Admin = () => {
           .admin-header {
             flex-direction: column;
             gap: 1rem;
+          }
+        }
+        
+        /* Image Modal Styles */
+        .image-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+          padding: 2rem;
+          animation: fadeIn 0.2s ease-out;
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        .image-modal {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          max-width: 900px;
+          width: 100%;
+          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
+          animation: slideUp 0.3s ease-out;
+        }
+        
+        @keyframes slideUp {
+          from {
+            transform: translateY(20px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        
+        .image-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1.5rem;
+          border-bottom: 1px solid var(--border-color);
+        }
+        
+        .image-modal-title {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin: 0;
+        }
+        
+        .image-modal-close {
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .image-modal-close:hover {
+          background: var(--accent-danger);
+          border-color: var(--accent-danger);
+          color: white;
+        }
+        
+        .image-modal-content {
+          padding: 1.5rem;
+          overflow-y: auto;
+          flex: 1;
+        }
+        
+        .image-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+          gap: 1.5rem;
+        }
+        
+        .image-item {
+          position: relative;
+          aspect-ratio: 4/3;
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          border: 1px solid var(--border-color);
+          background: var(--bg-tertiary);
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .image-item:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .image-item img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        
+        .image-number {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+          color: white;
+          padding: 0.75rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+          text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+          .image-grid {
+            grid-template-columns: 1fr;
+          }
+          
+          .image-modal-overlay {
+            padding: 1rem;
           }
         }
       `}</style>

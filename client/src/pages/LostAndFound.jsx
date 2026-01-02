@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import MapPicker from '../components/MapPicker';
+import EmergencyButton from '../components/EmergencyButton';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -424,6 +425,8 @@ const LostAndFound = () => {
           </div>
         )}
       </div>
+
+      <EmergencyButton />
 
       <style>{`
         .tabs {
