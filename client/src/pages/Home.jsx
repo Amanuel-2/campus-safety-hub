@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmergencyButton from '../components/EmergencyButton';
 import axios from 'axios';
@@ -7,12 +7,19 @@ import axios from 'axios';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const Home = () => {
+  const navigate = useNavigate();
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
 
   useEffect(() => {
+    // Check authentication
+    const token = localStorage.getItem('userToken');
+    if (!token) {
+      navigate('/user/login');
+      return;
+    }
     fetchLatestAnnouncements();
-  }, []);
+  }, [navigate]);
 
   const fetchLatestAnnouncements = async () => {
     try {

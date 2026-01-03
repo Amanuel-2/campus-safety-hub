@@ -16,6 +16,8 @@ const Admin = () => {
   const [incidents, setIncidents] = useState([]);
   const [emergencyAlerts, setEmergencyAlerts] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [policeAccounts, setPoliceAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentNotification, setCurrentNotification] = useState(null);
   const [stats, setStats] = useState({
@@ -23,6 +25,26 @@ const Admin = () => {
     pendingIncidents: 0,
     totalAnnouncements: 0,
     activeEmergencies: 0,
+    totalUsers: 0,
+    totalPolice: 0,
+  });
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [showPoliceModal, setShowPoliceModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editingPolice, setEditingPolice] = useState(null);
+  const [userForm, setUserForm] = useState({
+    universityId: '',
+    password: '',
+    name: '',
+    role: 'student',
+    phone: '',
+    department: '',
+  });
+  const [policeForm, setPoliceForm] = useState({
+    username: '',
+    password: '',
+    name: '',
+    badgeNumber: '',
   });
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -97,15 +119,19 @@ const Admin = () => {
 
   const fetchData = async () => {
     try {
-      const [incidentsRes, announcementsRes, emergenciesRes] = await Promise.all([
+        const [incidentsRes, announcementsRes, emergenciesRes, usersRes, policeRes] = await Promise.all([
         axios.get(`${API_URL}/incidents`, getAuthHeaders()),
         axios.get(`${API_URL}/announcements`, getAuthHeaders()),
         axios.get(`${API_URL}/emergency`, getAuthHeaders()),
+        axios.get(`${API_URL}/admin/management/users`, getAuthHeaders()),
+        axios.get(`${API_URL}/admin/management/police`, getAuthHeaders()),
       ]);
       
       setIncidents(incidentsRes.data);
       setAnnouncements(announcementsRes.data);
       setEmergencyAlerts(emergenciesRes.data);
+      setUsers(usersRes.data);
+      setPoliceAccounts(policeRes.data);
       
       const activeEmergencies = emergenciesRes.data.filter(a => a.status === 'active' || a.status === 'investigating').length;
       
@@ -114,6 +140,8 @@ const Admin = () => {
         pendingIncidents: incidentsRes.data.filter(i => i.status === 'pending').length,
         totalAnnouncements: announcementsRes.data.length,
         activeEmergencies,
+        totalUsers: usersRes.data.length,
+        totalPolice: policeRes.data.filter(p => p.isActive).length,
       });
     } catch (err) {
       console.error('Failed to fetch data:', err);
@@ -433,6 +461,27 @@ const Admin = () => {
             </svg>
             Announcements ({announcements.length})
           </button>
+          <button
+            className={`tab ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Users ({users.length})
+          </button>
+          <button
+            className={`tab ${activeTab === 'police' ? 'active' : ''}`}
+            onClick={() => setActiveTab('police')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+            </svg>
+            Police ({policeAccounts.filter(p => p.isActive).length})
+          </button>
         </div>
 
         {activeTab === 'announcements' && (
@@ -641,7 +690,7 @@ const Admin = () => {
               </tbody>
               </table>
             )
-          ) : (
+          ) : activeTab === 'announcements' ? (
             announcements.length === 0 ? (
               <div className="empty-state">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -710,7 +759,218 @@ const Admin = () => {
                 </tbody>
               </table>
             )
-          )}
+          ) : activeTab === 'users' ? (
+            <>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <button onClick={() => {
+                  setEditingUser(null);
+                  setUserForm({
+                    universityId: '',
+                    password: '',
+                    name: '',
+                    role: 'student',
+                    phone: '',
+                    department: '',
+                  });
+                  setShowUserModal(true);
+                }} className="btn btn-primary">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Create User
+                </button>
+              </div>
+              {users.length === 0 ? (
+                <div className="empty-state">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  <h3>No users</h3>
+                  <p>Create your first user account</p>
+                </div>
+              ) : (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>University ID</th>
+                      <th>Role</th>
+                      <th>Department</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((user) => (
+                      <tr key={user._id}>
+                        <td>{user.name}</td>
+                        <td>{user.universityId}</td>
+                        <td>
+                          <span className="badge badge-pending" style={{ textTransform: 'capitalize' }}>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td>{user.department || '-'}</td>
+                        <td>
+                          <span className={`badge ${user.isVerified ? 'badge-resolved' : 'badge-lost'}`}>
+                            {user.isVerified ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                              onClick={() => {
+                                setEditingUser(user);
+                                setUserForm({
+                                  universityId: user.universityId,
+                                  password: '',
+                                  name: user.name,
+                                  role: user.role,
+                                  phone: user.phone || '',
+                                  department: user.department || '',
+                                });
+                                setShowUserModal(true);
+                              }}
+                              className="btn btn-secondary btn-sm"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                              </svg>
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Are you sure you want to deactivate this user?')) return;
+                                try {
+                                  await axios.delete(`${API_URL}/admin/management/users/${user._id}`, getAuthHeaders());
+                                  fetchData();
+                                } catch (err) {
+                                  console.error('Failed to deactivate user:', err);
+                                  alert('Failed to deactivate user');
+                                }
+                              }}
+                              className="btn btn-danger btn-sm"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ) : activeTab === 'police' ? (
+            <>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <button onClick={() => {
+                  setEditingPolice(null);
+                  setPoliceForm({
+                    username: '',
+                    password: '',
+                    name: '',
+                    badgeNumber: '',
+                  });
+                  setShowPoliceModal(true);
+                }} className="btn btn-primary">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Create Police Account
+                </button>
+              </div>
+              {policeAccounts.length === 0 ? (
+                <div className="empty-state">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                  </svg>
+                  <h3>No police accounts</h3>
+                  <p>Create your first police account</p>
+                </div>
+              ) : (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Username</th>
+                      <th>Badge Number</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {policeAccounts.map((police) => (
+                      <tr key={police._id}>
+                        <td>{police.name}</td>
+                        <td>{police.username}</td>
+                        <td>{police.badgeNumber || '-'}</td>
+                        <td>
+                          <span className={`badge ${police.isActive ? 'badge-resolved' : 'badge-lost'}`}>
+                            {police.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="date-cell">
+                            {new Date(police.createdAt).toLocaleDateString()}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                              onClick={() => {
+                                setEditingPolice(police);
+                                setPoliceForm({
+                                  username: police.username,
+                                  password: '',
+                                  name: police.name,
+                                  badgeNumber: police.badgeNumber || '',
+                                });
+                                setShowPoliceModal(true);
+                              }}
+                              className="btn btn-secondary btn-sm"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                              </svg>
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Are you sure you want to deactivate this police account?')) return;
+                                try {
+                                  await axios.delete(`${API_URL}/admin/management/police/${police._id}`, getAuthHeaders());
+                                  fetchData();
+                                } catch (err) {
+                                  console.error('Failed to deactivate police:', err);
+                                  alert('Failed to deactivate police account');
+                                }
+                              }}
+                              className="btn btn-danger btn-sm"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -834,6 +1094,217 @@ const Admin = () => {
               </button>
               <button onClick={submitAnnouncement} className="btn btn-primary" disabled={submittingAnnouncement}>
                 {submittingAnnouncement ? 'Saving...' : editingAnnouncement ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Management Modal */}
+      {showUserModal && (
+        <div className="announcement-modal-overlay" onClick={() => setShowUserModal(false)}>
+          <div className="announcement-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="announcement-modal-header">
+              <h3 className="announcement-modal-title">
+                {editingUser ? 'Edit User' : 'Create User'}
+              </h3>
+              <button onClick={() => setShowUserModal(false)} className="announcement-modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="announcement-modal-content">
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Full Name *</label>
+                <input
+                  type="text"
+                  value={userForm.name}
+                  onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                  className="announcement-form-input"
+                  placeholder="Enter full name"
+                />
+              </div>
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">University ID *</label>
+                <input
+                  type="text"
+                  value={userForm.universityId}
+                  onChange={(e) => setUserForm({ ...userForm, universityId: e.target.value.toUpperCase() })}
+                  className="announcement-form-input"
+                  placeholder="Enter university ID"
+                  disabled={!!editingUser}
+                />
+              </div>
+              {!editingUser && (
+                <div className="announcement-form-group">
+                  <label className="announcement-form-label">Password *</label>
+                  <input
+                    type="password"
+                    value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    className="announcement-form-input"
+                    placeholder="Enter password (min 6 characters)"
+                  />
+                </div>
+              )}
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Role *</label>
+                <select
+                  value={userForm.role}
+                  onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                  className="announcement-form-select"
+                >
+                  <option value="student">Student</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </div>
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Phone (Optional)</label>
+                <input
+                  type="tel"
+                  value={userForm.phone}
+                  onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                  className="announcement-form-input"
+                  placeholder="Enter phone number"
+                />
+              </div>
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Department (Optional)</label>
+                <input
+                  type="text"
+                  value={userForm.department}
+                  onChange={(e) => setUserForm({ ...userForm, department: e.target.value })}
+                  className="announcement-form-input"
+                  placeholder="Enter department"
+                />
+              </div>
+            </div>
+            <div className="announcement-modal-actions">
+              <button onClick={() => setShowUserModal(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!userForm.name || !userForm.universityId || (!editingUser && !userForm.password)) {
+                    alert('Please fill in all required fields');
+                    return;
+                  }
+                  try {
+                    if (editingUser) {
+                      await axios.put(`${API_URL}/admin/management/users/${editingUser._id}`, {
+                        name: userForm.name,
+                        role: userForm.role,
+                        phone: userForm.phone,
+                        department: userForm.department,
+                      }, getAuthHeaders());
+                    } else {
+                      await axios.post(`${API_URL}/admin/management/users`, userForm, getAuthHeaders());
+                    }
+                    await fetchData();
+                    setShowUserModal(false);
+                  } catch (err) {
+                    alert(err.response?.data?.message || 'Failed to save user');
+                  }
+                }}
+                className="btn btn-primary"
+              >
+                {editingUser ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Police Management Modal */}
+      {showPoliceModal && (
+        <div className="announcement-modal-overlay" onClick={() => setShowPoliceModal(false)}>
+          <div className="announcement-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="announcement-modal-header">
+              <h3 className="announcement-modal-title">
+                {editingPolice ? 'Edit Police Account' : 'Create Police Account'}
+              </h3>
+              <button onClick={() => setShowPoliceModal(false)} className="announcement-modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="announcement-modal-content">
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Full Name *</label>
+                <input
+                  type="text"
+                  value={policeForm.name}
+                  onChange={(e) => setPoliceForm({ ...policeForm, name: e.target.value })}
+                  className="announcement-form-input"
+                  placeholder="Enter full name"
+                />
+              </div>
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Username *</label>
+                <input
+                  type="text"
+                  value={policeForm.username}
+                  onChange={(e) => setPoliceForm({ ...policeForm, username: e.target.value.toLowerCase() })}
+                  className="announcement-form-input"
+                  placeholder="Enter username"
+                  disabled={!!editingPolice}
+                />
+              </div>
+              {!editingPolice && (
+                <div className="announcement-form-group">
+                  <label className="announcement-form-label">Password *</label>
+                  <input
+                    type="password"
+                    value={policeForm.password}
+                    onChange={(e) => setPoliceForm({ ...policeForm, password: e.target.value })}
+                    className="announcement-form-input"
+                    placeholder="Enter password (min 6 characters)"
+                  />
+                </div>
+              )}
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Badge Number (Optional)</label>
+                <input
+                  type="text"
+                  value={policeForm.badgeNumber}
+                  onChange={(e) => setPoliceForm({ ...policeForm, badgeNumber: e.target.value })}
+                  className="announcement-form-input"
+                  placeholder="Enter badge number"
+                />
+              </div>
+            </div>
+            <div className="announcement-modal-actions">
+              <button onClick={() => setShowPoliceModal(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!policeForm.name || !policeForm.username || (!editingPolice && !policeForm.password)) {
+                    alert('Please fill in all required fields');
+                    return;
+                  }
+                  try {
+                    if (editingPolice) {
+                      await axios.put(`${API_URL}/admin/management/police/${editingPolice._id}`, {
+                        name: policeForm.name,
+                        badgeNumber: policeForm.badgeNumber,
+                      }, getAuthHeaders());
+                    } else {
+                      await axios.post(`${API_URL}/admin/management/police`, policeForm, getAuthHeaders());
+                    }
+                    await fetchData();
+                    setShowPoliceModal(false);
+                  } catch (err) {
+                    alert(err.response?.data?.message || 'Failed to save police account');
+                  }
+                }}
+                className="btn btn-primary"
+              >
+                {editingPolice ? 'Update' : 'Create'}
               </button>
             </div>
           </div>

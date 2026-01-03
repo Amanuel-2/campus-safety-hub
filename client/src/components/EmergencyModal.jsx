@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import CampusMapPicker from './CampusMapPicker';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const EmergencyModal = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1: Warning, 2: Form, 3: Success
   const [formData, setFormData] = useState({
     locationId: null,
@@ -37,8 +39,16 @@ const EmergencyModal = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
-  // Get campus token from localStorage (if student is logged in)
-  const campusToken = localStorage.getItem('campusToken');
+  // Check authentication
+  useEffect(() => {
+    if (isOpen) {
+      const token = localStorage.getItem('userToken');
+      if (!token) {
+        onClose();
+        navigate('/user/login');
+      }
+    }
+  }, [isOpen, navigate, onClose]);
 
   const emergencyTypes = [
     { value: 'medical', label: 'Medical Emergency', icon: '🏥' },
@@ -81,12 +91,18 @@ const EmergencyModal = ({ isOpen, onClose }) => {
     }
 
     try {
+      // Get auth token
+      const token = localStorage.getItem('userToken');
+      if (!token) {
+        navigate('/user/login');
+        return;
+      }
+
       const payload = {
         locationId: formData.locationId,
         area: formData.area || null, // Optional
         emergencyType: formData.emergencyType,
         description: formData.description || '',
-        campusToken: campusToken || null,
         contactInfo: (formData.contactInfo.phone || formData.contactInfo.email) ? formData.contactInfo : null,
       };
 
@@ -97,6 +113,7 @@ const EmergencyModal = ({ isOpen, onClose }) => {
 
       await axios.post(`${API_URL}/emergency/alert`, payload, {
         headers: {
+          'Authorization': `Bearer ${token}`,
           'X-Device-Fingerprint': deviceFingerprint,
         },
       });

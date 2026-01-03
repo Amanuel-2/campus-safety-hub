@@ -3,13 +3,46 @@ import { Link, useLocation } from 'react-router-dom';
 const Navbar = () => {
   const location = useLocation();
   
-  const links = [
-    { to: '/', label: 'Home' },
-    { to: '/announcements', label: 'Announcements' },
-    { to: '/report', label: 'Report Incident' },
-    { to: '/map', label: 'Map View' },
-    { to: '/admin', label: 'Admin' },
-  ];
+  // Determine user role from localStorage
+  const userToken = localStorage.getItem('userToken');
+  const policeToken = localStorage.getItem('policeToken');
+  const adminToken = localStorage.getItem('adminToken');
+  
+  let links = [];
+  
+  if (userToken) {
+    // User (Student/Staff) navigation
+    links = [
+      { to: '/user/home', label: 'Home' },
+      { to: '/announcements', label: 'Announcements' },
+      { to: '/report', label: 'Report Incident' },
+      { to: '/my-reports', label: 'My Reports' },
+      { to: '/map', label: 'Map View' },
+    ];
+  } else if (policeToken) {
+    // Police navigation
+    links = [
+      { to: '/police/dashboard', label: 'Dashboard' },
+    ];
+  } else if (adminToken) {
+    // Admin navigation
+    links = [
+      { to: '/admin/dashboard', label: 'Dashboard' },
+    ];
+  } else {
+    // Public navigation (when not logged in)
+    links = [
+      { to: '/', label: 'Home' },
+      { to: '/announcements', label: 'Announcements' },
+    ];
+  }
+  
+  const handleLogout = () => {
+    localStorage.removeItem('userToken');
+    localStorage.removeItem('policeToken');
+    localStorage.removeItem('adminToken');
+    window.location.href = '/';
+  };
   
   return (
     <nav className="navbar">
@@ -31,6 +64,11 @@ const Navbar = () => {
               {link.label}
             </Link>
           ))}
+          {(userToken || policeToken || adminToken) && (
+            <button onClick={handleLogout} className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              Logout
+            </button>
+          )}
         </div>
       </div>
     </nav>

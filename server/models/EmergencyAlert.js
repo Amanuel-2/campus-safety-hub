@@ -34,6 +34,27 @@ const emergencyAlertSchema = new mongoose.Schema({
     type: String,
     maxlength: [500, 'Description cannot exceed 500 characters'],
   },
+  // Reporter identity (required for authenticated users)
+  reportedBy: {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    universityId: {
+      type: String,
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ['student', 'staff'],
+      required: true,
+    },
+  },
   // Privacy: Only store verification status, not identity
   isVerifiedDevice: {
     type: Boolean,
@@ -59,7 +80,7 @@ const emergencyAlertSchema = new mongoose.Schema({
       lowercase: true,
     },
   },
-  // Admin management
+  // Admin/Police management
   status: {
     type: String,
     enum: ['active', 'investigating', 'resolved', 'false_alarm'],
@@ -75,6 +96,13 @@ const emergencyAlertSchema = new mongoose.Schema({
   resolvedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin',
+  },
+  acknowledgedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Police',
+  },
+  acknowledgedAt: {
+    type: Date,
   },
   // Abuse prevention tracking
   deviceFingerprint: {

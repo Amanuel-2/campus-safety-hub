@@ -10,9 +10,10 @@ export const SocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Only connect if admin is logged in
+    // Connect if admin or police is logged in
     const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
+    const policeToken = localStorage.getItem('policeToken');
+    if (!adminToken && !policeToken) {
       return;
     }
 
@@ -24,8 +25,13 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('connect', () => {
       console.log('Socket connected:', newSocket.id);
       setIsConnected(true);
-      // Join admin room
-      newSocket.emit('admin-join');
+      // Join appropriate room
+      if (adminToken) {
+        newSocket.emit('admin-join');
+      }
+      if (policeToken) {
+        newSocket.emit('police-join');
+      }
     });
 
     newSocket.on('disconnect', () => {

@@ -33,7 +33,16 @@ const EmergencyNotification = ({ alert, onDismiss }) => {
   };
 
   const handleClick = () => {
-    navigate('/admin', { state: { emergencyAlertId: alert.alertId } });
+    // Check if user is police or admin
+    const policeToken = localStorage.getItem('policeToken');
+    const adminToken = localStorage.getItem('adminToken');
+    
+    if (policeToken) {
+      navigate('/police/dashboard', { state: { emergencyAlertId: alert.alertId } });
+    } else if (adminToken) {
+      navigate('/admin', { state: { emergencyAlertId: alert.alertId } });
+    }
+    
     if (onDismiss) {
       onDismiss();
     }

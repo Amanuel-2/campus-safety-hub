@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const Incident = require('../models/Incident');
-const authMiddleware = require('../middleware/auth');
+const User = require('../models/User');
+const { requireUser, requirePolice, requireAdmin } = require('../middleware/roleAuth');
 
-// GET all incidents
-router.get('/', async (req, res) => {
+// GET all incidents (police/admin only)
+router.get('/', requirePolice, async (req, res) => {
   try {
     const { status, type, severity, limit = 100 } = req.query;
     
@@ -14,8 +15,10 @@ router.get('/', async (req, res) => {
     if (severity) filter.severity = severity;
     
     const incidents = await Incident.find(filter)
+      .populate('reportedBy.userId', 'name campusId role phone department')
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
     
     res.json(incidents);
   } catch (error) {
@@ -23,23 +26,55 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET single incident by ID
-router.get('/:id', async (req, res) => {
+// GET user's own reports
+router.get('/my-reports', requireUser, async (req, res) => {
   try {
-    const incident = await Incident.findById(req.params.id);
+    const incidents = await Incident.find({ 'reportedBy.userId': req.user.id })
+      .select('-internalNotes') // Don't show internal notes to users
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    res.json(incidents);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching your reports', error: error.message });
+  }
+});
+
+// GET single incident by ID
+router.get('/:id', requireUser, async (req, res) => {
+  try {
+    const incident = await Incident.findById(req.params.id)
+      .populate('reportedBy.userId', 'name campusId role')
+      .lean();
+    
     if (!incident) {
       return res.status(404).json({ message: 'Incident not found' });
     }
+    
+    // Users can only see their own incidents, police/admin can see all
+    const isOwner = incident.reportedBy?.userId?.toString() === req.user.id;
+    const isPolice = req.user.role === 'police';
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    
+    if (!isOwner && !isPolice && !isAdmin) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Don't show internal notes to regular users
+    if (!isPolice && !isAdmin) {
+      delete incident.internalNotes;
+    }
+    
     res.json(incident);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching incident', error: error.message });
   }
 });
 
-// POST create new incident
-router.post('/', async (req, res) => {
+// POST create new incident (requires user authentication)
+router.post('/', requireUser, async (req, res) => {
   try {
-    const { title, description, type, severity, location, locationDescription, anonymous, reporterName, reporterContact, images } = req.body;
+    const { title, description, type, severity, location, locationId, locationDescription, images } = req.body;
     
     // Validate required fields
     if (!title || !title.trim()) {
@@ -48,6 +83,12 @@ router.post('/', async (req, res) => {
     
     if (!description || !description.trim()) {
       return res.status(400).json({ message: 'Description is required' });
+    }
+    
+    // Get user details
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
     
     // Ensure images is an array
@@ -75,7 +116,7 @@ router.post('/', async (req, res) => {
       }
     }
     
-    // Create incident data object
+    // Create incident data object with reporter identity
     const incidentData = {
       title: title.trim(),
       description: description.trim(),
@@ -83,10 +124,14 @@ router.post('/', async (req, res) => {
       severity: severity || 'medium',
       images: imagesArray,
       location: location || null,
+      locationId: locationId || null,
       locationDescription: locationDescription ? locationDescription.trim() : '',
-      anonymous: anonymous !== undefined ? anonymous : true,
-      reporterName: anonymous ? '' : (reporterName ? reporterName.trim() : ''),
-      reporterContact: anonymous ? '' : (reporterContact ? reporterContact.trim() : ''),
+      reportedBy: {
+        userId: user._id,
+        name: user.name,
+        universityId: user.universityId || user.campusId,
+        role: user.role,
+      },
     };
     
     const incident = new Incident(incidentData);
@@ -124,8 +169,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PATCH update incident (admin only)
-router.patch('/:id', authMiddleware, async (req, res) => {
+// PATCH update incident (police/admin only)
+router.patch('/:id', requirePolice, async (req, res) => {
   try {
     const { status, severity } = req.body;
     const updateData = {};
@@ -150,7 +195,7 @@ router.patch('/:id', authMiddleware, async (req, res) => {
 });
 
 // DELETE incident (admin only)
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const incident = await Incident.findByIdAndDelete(req.params.id);
     

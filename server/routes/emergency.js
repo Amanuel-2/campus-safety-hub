@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const EmergencyAlert = require('../models/EmergencyAlert');
+const User = require('../models/User');
 const { emergencyAlertLimiter } = require('../middleware/rateLimiter');
+const { requireUser, requirePolice, requireAdmin } = require('../middleware/roleAuth');
 const { broadcastEmergencyAlert } = require('../services/socketService');
 const { sendEmergencyEmail } = require('../services/emailService');
 
@@ -21,8 +23,8 @@ const generateDeviceFingerprint = (req) => {
   return crypto.createHash('sha256').update(userAgent + ip).digest('hex').substring(0, 16);
 };
 
-// POST emergency alert - FAIL OPEN (no authentication required)
-router.post('/alert', emergencyAlertLimiter, async (req, res) => {
+// POST emergency alert - Requires user authentication
+router.post('/alert', emergencyAlertLimiter, requireUser, async (req, res) => {
   try {
     const { 
       locationId,
@@ -32,7 +34,6 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
       emergencyType, 
       description,
       contactInfo,
-      campusToken // Optional - proves verified device
     } = req.body;
     
     // Location is required (either locationId or building)
@@ -42,7 +43,13 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
       });
     }
     
-    // Create emergency alert
+    // Get user details
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Create emergency alert with reporter identity
     const alert = new EmergencyAlert({
       timestamp: new Date(),
       location: {
@@ -53,8 +60,13 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
       },
       emergencyType: emergencyType || 'other',
       description: description ? description.trim() : undefined,
-      isVerifiedDevice: !!campusToken,
-      campusTokenHash: campusToken ? hashCampusToken(campusToken) : null,
+      reportedBy: {
+        userId: user._id,
+        name: user.name,
+        universityId: user.universityId || user.campusId,
+        role: user.role,
+      },
+      isVerifiedDevice: true,
       deviceFingerprint: generateDeviceFingerprint(req),
       contactInfo: contactInfo ? {
         provided: true,
@@ -98,8 +110,8 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
   }
 });
 
-// GET all emergency alerts (admin only - will add auth middleware)
-router.get('/', async (req, res) => {
+// GET all emergency alerts (police/admin only)
+router.get('/', requirePolice, async (req, res) => {
   try {
     const { status, limit = 50 } = req.query;
     
@@ -118,11 +130,12 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET single emergency alert
-router.get('/:id', async (req, res) => {
+// GET single emergency alert (police/admin only)
+router.get('/:id', requirePolice, async (req, res) => {
   try {
     const alert = await EmergencyAlert.findById(req.params.id)
       .populate('resolvedBy', 'username name')
+      .populate('reportedBy.userId', 'name campusId role')
       .lean();
     
     if (!alert) {
@@ -135,22 +148,25 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PATCH update emergency alert status (admin only)
-router.patch('/:id', async (req, res) => {
+// PATCH update emergency alert status (police/admin)
+router.patch('/:id', requirePolice, async (req, res) => {
   try {
-    const { status, adminNotes } = req.body;
+    const { status, adminNotes, acknowledge } = req.body;
     
     const updateData = {};
     if (status) {
       updateData.status = status;
       if (status === 'resolved' || status === 'false_alarm') {
         updateData.resolvedAt = new Date();
-        // In production, get admin ID from auth middleware
-        // updateData.resolvedBy = req.admin.id;
+        updateData.resolvedBy = req.police.id || req.admin?.id;
       }
     }
     if (adminNotes !== undefined) {
       updateData.adminNotes = adminNotes;
+    }
+    if (acknowledge) {
+      updateData.acknowledgedBy = req.police.id;
+      updateData.acknowledgedAt = new Date();
     }
     
     const alert = await EmergencyAlert.findByIdAndUpdate(
@@ -179,8 +195,8 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// GET active emergency alerts count (for admin dashboard)
-router.get('/stats/active', async (req, res) => {
+// GET active emergency alerts count (for admin/police dashboard)
+router.get('/stats/active', requirePolice, async (req, res) => {
   try {
     const activeCount = await EmergencyAlert.countDocuments({ status: 'active' });
     const investigatingCount = await EmergencyAlert.countDocuments({ status: 'investigating' });

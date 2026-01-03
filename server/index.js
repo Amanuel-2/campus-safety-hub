@@ -11,7 +11,9 @@ const incidentRoutes = require('./routes/incidents');
 const announcementRoutes = require('./routes/announcements');
 const adminAnnouncementRoutes = require('./routes/adminAnnouncements');
 const authRoutes = require('./routes/auth');
-const studentRoutes = require('./routes/students');
+const userRoutes = require('./routes/users');
+const policeRoutes = require('./routes/police');
+const adminManagementRoutes = require('./routes/adminManagement');
 const emergencyRoutes = require('./routes/emergency');
 
 const app = express();
@@ -56,7 +58,9 @@ app.use('/api/incidents', incidentRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/admin/announcements', adminAnnouncementRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/students', studentRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/police', policeRoutes);
+app.use('/api/admin', adminManagementRoutes);
 app.use('/api/emergency', emergencyRoutes);
 
 // Health check

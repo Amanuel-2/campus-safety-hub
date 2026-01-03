@@ -45,23 +45,56 @@ const incidentSchema = new mongoose.Schema({
     lat: { type: Number },
     lng: { type: Number },
   },
+  locationId: {
+    type: String,
+    trim: true,
+  },
   locationDescription: {
     type: String,
     trim: true,
     maxlength: [300, 'Location description cannot exceed 300 characters'],
   },
-  anonymous: {
-    type: Boolean,
-    default: true,
+  // Reporter identity (required)
+  reportedBy: {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    universityId: {
+      type: String,
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ['student', 'staff'],
+      required: true,
+    },
   },
-  reporterName: {
-    type: String,
-    trim: true,
-  },
-  reporterContact: {
-    type: String,
-    trim: true,
-  },
+  // Internal notes for police/admin
+  internalNotes: [{
+    content: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    addedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: 'internalNotes.addedByModel',
+    },
+    addedByModel: {
+      type: String,
+      enum: ['Police', 'Admin'],
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
 }, {
   timestamps: true,
 });
