@@ -39,7 +39,7 @@ router.get('/:id', async (req, res) => {
 // POST create new incident
 router.post('/', async (req, res) => {
   try {
-    const { title, description, type, severity, location, locationDescription, anonymous, reporterName, reporterContact, images } = req.body;
+    const { title, description, type, severity, locationId, location, locationDescription, anonymous, reporterName, reporterContact, images } = req.body;
     
     // Validate required fields
     if (!title || !title.trim()) {
@@ -82,7 +82,8 @@ router.post('/', async (req, res) => {
       type: type || 'safety_concern',
       severity: severity || 'medium',
       images: imagesArray,
-      location: location || null,
+      locationId: locationId ? locationId.trim() : null,
+      location: location || null, // Keep for backward compatibility
       locationDescription: locationDescription ? locationDescription.trim() : '',
       anonymous: anonymous !== undefined ? anonymous : true,
       reporterName: anonymous ? '' : (reporterName ? reporterName.trim() : ''),

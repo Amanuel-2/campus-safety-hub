@@ -8,18 +8,18 @@ const emergencyAlertSchema = new mongoose.Schema({
     index: true,
   },
   location: {
-    building: {
+    locationId: {
       type: String,
       required: true,
+      trim: true,
+    },
+    building: {
+      type: String,
       trim: true,
     },
     area: {
       type: String,
       trim: true,
-    },
-    coordinates: {
-      lat: { type: Number },
-      lng: { type: Number },
     },
   },
   emergencyType: {
@@ -84,6 +84,7 @@ const emergencyAlertSchema = new mongoose.Schema({
 
 // Index for efficient queries
 emergencyAlertSchema.index({ status: 1, timestamp: -1 });
+emergencyAlertSchema.index({ 'location.locationId': 1 });
 emergencyAlertSchema.index({ 'location.building': 1 });
 emergencyAlertSchema.index({ campusTokenHash: 1 });
 

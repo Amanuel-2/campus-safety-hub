@@ -1,28 +1,15 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import MapPicker from './MapPicker';
+import CampusMapPicker from './CampusMapPicker';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-// Weliso campus building names
-const BUILDING_NAMES = [
-  'Café',
-  'Library',
-  'Launch',
-  'Clinic',
-  'Male Dormitory 1',
-  'Male Dormitory 2',
-  'Female Dormitory',
-  'Registrar',
-  'Other',
-];
 
-const EmergencyModal = ({ isOpen, onClose, initialLocation = null }) => {
+const EmergencyModal = ({ isOpen, onClose }) => {
   const [step, setStep] = useState(1); // 1: Warning, 2: Form, 3: Success
   const [formData, setFormData] = useState({
-    building: '',
+    locationId: null,
     area: '',
-    coordinates: null,
     emergencyType: 'other',
     description: '',
     contactInfo: {
@@ -32,16 +19,14 @@ const EmergencyModal = ({ isOpen, onClose, initialLocation = null }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [locationLoading, setLocationLoading] = useState(false);
 
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
       setStep(1);
       setFormData({
-        building: '',
+        locationId: null,
         area: '',
-        coordinates: null,
         emergencyType: 'other',
         description: '',
         contactInfo: {
@@ -50,62 +35,8 @@ const EmergencyModal = ({ isOpen, onClose, initialLocation = null }) => {
         },
       });
       setError('');
-      setLocationLoading(false);
     }
   }, [isOpen]);
-
-  // Update coordinates when initialLocation prop changes (location captured from EmergencyButton)
-  // This ensures location is automatically set when captured - THIS IS THE MAIN FEATURE
-  useEffect(() => {
-    if (isOpen && step === 2) {
-      if (initialLocation) {
-        // Location was successfully captured by EmergencyButton
-        console.log('✅ EmergencyModal: Location automatically captured:', initialLocation);
-        setFormData(prev => ({
-          ...prev,
-          coordinates: initialLocation,
-        }));
-        setLocationLoading(false);
-      } else if (initialLocation === null) {
-        // Location capture failed or not yet captured
-        console.log('⚠️ EmergencyModal: Location not available (may still be capturing or failed)');
-        setLocationLoading(false);
-        // Don't update coordinates - keep as null, alert can still be sent
-      }
-    }
-  }, [initialLocation, isOpen, step]);
-
-  // Try to get location when modal opens to step 2 if not already captured
-  useEffect(() => {
-    if (isOpen && step === 2 && !formData.coordinates && !initialLocation) {
-      // Fallback: try to get location if not provided
-      setLocationLoading(true);
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            setFormData(prev => ({
-              ...prev,
-              coordinates: { lat: latitude, lng: longitude },
-            }));
-            setLocationLoading(false);
-          },
-          (err) => {
-            console.warn('Geolocation error:', err);
-            setLocationLoading(false);
-            // Location will be null - emergency alert can still be sent
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
-          }
-        );
-      } else {
-        setLocationLoading(false);
-      }
-    }
-  }, [isOpen, step]);
 
   // Get campus token from localStorage (if student is logged in)
   const campusToken = localStorage.getItem('campusToken');
@@ -131,10 +62,10 @@ const EmergencyModal = ({ isOpen, onClose, initialLocation = null }) => {
     }
   };
 
-  const handleLocationSelect = (location) => {
+  const handleLocationSelect = (locationData) => {
     setFormData(prev => ({
       ...prev,
-      coordinates: { lat: location.lat, lng: location.lng },
+      locationId: locationData.locationId,
     }));
   };
 
@@ -143,23 +74,22 @@ const EmergencyModal = ({ isOpen, onClose, initialLocation = null }) => {
     setLoading(true);
     setError('');
 
-    // Building selection is optional - location is the main requirement
-    // Location coordinates are ALWAYS included automatically (may be null if capture failed)
-    // Emergency alert can still be sent even if location capture failed
+    // Location selection is required
+    if (!formData.locationId) {
+      setError('Please select a location on the campus map.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const payload = {
-        building: formData.building || null, // Optional
+        locationId: formData.locationId,
         area: formData.area || null, // Optional
-        coordinates: formData.coordinates, // ALWAYS included automatically (may be null if capture failed)
         emergencyType: formData.emergencyType,
         description: formData.description || '',
         campusToken: campusToken || null,
         contactInfo: (formData.contactInfo.phone || formData.contactInfo.email) ? formData.contactInfo : null,
       };
-
-      // Log payload to verify location is included
-      console.log('Emergency Alert Payload (location automatically included):', payload);
-      console.log('Coordinates included:', payload.coordinates ? `YES - ${payload.coordinates.lat}, ${payload.coordinates.lng}` : 'NO (null - capture failed)');
 
       // Add device fingerprint header
       const deviceFingerprint = localStorage.getItem('deviceFingerprint') || 
@@ -254,18 +184,14 @@ const EmergencyModal = ({ isOpen, onClose, initialLocation = null }) => {
             )}
 
             <div className="form-group">
-              <label className="form-label">Building Location (optional)</label>
-              <select
-                name="building"
-                value={formData.building}
-                onChange={handleChange}
-                className="form-select"
-              >
-                <option value="">Select building (optional)...</option>
-                {BUILDING_NAMES.map(building => (
-                  <option key={building} value={building}>{building}</option>
-                ))}
-              </select>
+              <label className="form-label">Select Location on Campus Map <span style={{ color: 'var(--accent-danger)' }}>*</span></label>
+              <CampusMapPicker 
+                onLocationSelect={handleLocationSelect} 
+                initialLocationId={formData.locationId}
+              />
+              <p className="form-hint">
+                <strong>Required:</strong> Please select your location from the campus map above. Click on a building pin to select it.
+              </p>
             </div>
 
             <div className="form-group">
@@ -278,40 +204,6 @@ const EmergencyModal = ({ isOpen, onClose, initialLocation = null }) => {
                 className="form-input"
                 placeholder="e.g., Room 205, 2nd floor, North entrance"
               />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Location Coordinates (Automatically Captured)</label>
-              {locationLoading ? (
-                <div className="location-loading">
-                  <span className="spinner" style={{ width: 20, height: 20 }} />
-                  <span>Capturing your location automatically...</span>
-                </div>
-              ) : formData.coordinates ? (
-                <div className="location-success">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                  <span><strong>Location automatically captured:</strong> {formData.coordinates.lat.toFixed(6)}, {formData.coordinates.lng.toFixed(6)}</span>
-                </div>
-              ) : (
-                <div className="location-warning">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <span>Location capture unavailable. Emergency alert can still be sent. You can manually select location on map below if needed.</span>
-                </div>
-              )}
-              <MapPicker 
-                onLocationSelect={handleLocationSelect} 
-                initialPosition={formData.coordinates}
-              />
-              <p className="form-hint">
-                <strong>Automatic Location Capture:</strong> Your location is captured automatically when you click the emergency button. No manual selection required. Location coordinates are always included in the emergency alert submission.
-              </p>
             </div>
 
             <div className="form-group">
