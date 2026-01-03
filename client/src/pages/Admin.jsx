@@ -34,12 +34,14 @@ const Admin = () => {
   const [editingPolice, setEditingPolice] = useState(null);
   const [userForm, setUserForm] = useState({
     universityId: '',
+    email: '',
     password: '',
     name: '',
     role: 'student',
     phone: '',
     department: '',
   });
+  const [successMessage, setSuccessMessage] = useState('');
   const [policeForm, setPoliceForm] = useState({
     username: '',
     password: '',
@@ -123,8 +125,8 @@ const Admin = () => {
         axios.get(`${API_URL}/incidents`, getAuthHeaders()),
         axios.get(`${API_URL}/announcements`, getAuthHeaders()),
         axios.get(`${API_URL}/emergency`, getAuthHeaders()),
-        axios.get(`${API_URL}/admin/management/users`, getAuthHeaders()),
-        axios.get(`${API_URL}/admin/management/police`, getAuthHeaders()),
+        axios.get(`${API_URL}/admin/users`, getAuthHeaders()),
+        axios.get(`${API_URL}/admin/police`, getAuthHeaders()),
       ]);
       
       setIncidents(incidentsRes.data);
@@ -766,12 +768,14 @@ const Admin = () => {
                   setEditingUser(null);
                   setUserForm({
                     universityId: '',
+                    email: '',
                     password: '',
                     name: '',
                     role: 'student',
                     phone: '',
                     department: '',
                   });
+                  setSuccessMessage('');
                   setShowUserModal(true);
                 }} className="btn btn-primary">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -797,6 +801,7 @@ const Admin = () => {
                   <thead>
                     <tr>
                       <th>Name</th>
+                      <th>Email</th>
                       <th>University ID</th>
                       <th>Role</th>
                       <th>Department</th>
@@ -808,7 +813,8 @@ const Admin = () => {
                     {users.map((user) => (
                       <tr key={user._id}>
                         <td>{user.name}</td>
-                        <td>{user.universityId}</td>
+                        <td>{user.email || '-'}</td>
+                        <td>{user.universityId || user.campusId}</td>
                         <td>
                           <span className="badge badge-pending" style={{ textTransform: 'capitalize' }}>
                             {user.role}
@@ -826,13 +832,15 @@ const Admin = () => {
                               onClick={() => {
                                 setEditingUser(user);
                                 setUserForm({
-                                  universityId: user.universityId,
+                                  universityId: user.universityId || user.campusId,
+                                  email: user.email || '',
                                   password: '',
                                   name: user.name,
                                   role: user.role,
                                   phone: user.phone || '',
                                   department: user.department || '',
                                 });
+                                setSuccessMessage('');
                                 setShowUserModal(true);
                               }}
                               className="btn btn-secondary btn-sm"
@@ -846,7 +854,7 @@ const Admin = () => {
                               onClick={async () => {
                                 if (!confirm('Are you sure you want to deactivate this user?')) return;
                                 try {
-                                  await axios.delete(`${API_URL}/admin/management/users/${user._id}`, getAuthHeaders());
+                                  await axios.delete(`${API_URL}/admin/users/${user._id}`, getAuthHeaders());
                                   fetchData();
                                 } catch (err) {
                                   console.error('Failed to deactivate user:', err);
@@ -948,7 +956,7 @@ const Admin = () => {
                               onClick={async () => {
                                 if (!confirm('Are you sure you want to deactivate this police account?')) return;
                                 try {
-                                  await axios.delete(`${API_URL}/admin/management/police/${police._id}`, getAuthHeaders());
+                                  await axios.delete(`${API_URL}/admin/police/${police._id}`, getAuthHeaders());
                                   fetchData();
                                 } catch (err) {
                                   console.error('Failed to deactivate police:', err);
@@ -1102,19 +1110,36 @@ const Admin = () => {
 
       {/* User Management Modal */}
       {showUserModal && (
-        <div className="announcement-modal-overlay" onClick={() => setShowUserModal(false)}>
+        <div className="announcement-modal-overlay" onClick={() => {
+          setShowUserModal(false);
+          setSuccessMessage('');
+        }}>
           <div className="announcement-modal" onClick={(e) => e.stopPropagation()}>
             <div className="announcement-modal-header">
               <h3 className="announcement-modal-title">
                 {editingUser ? 'Edit User' : 'Create User'}
               </h3>
-              <button onClick={() => setShowUserModal(false)} className="announcement-modal-close">
+              <button onClick={() => {
+                setShowUserModal(false);
+                setSuccessMessage('');
+              }} className="announcement-modal-close">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18"/>
                   <line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
               </button>
             </div>
+            {successMessage && (
+              <div style={{ 
+                padding: '1rem 1.5rem', 
+                background: '#26de81', 
+                color: 'white', 
+                borderBottom: '1px solid var(--border-color)',
+                fontWeight: 500
+              }}>
+                {successMessage}
+              </div>
+            )}
             <div className="announcement-modal-content">
               <div className="announcement-form-group">
                 <label className="announcement-form-label">Full Name *</label>
@@ -1126,6 +1151,18 @@ const Admin = () => {
                   placeholder="Enter full name"
                 />
               </div>
+              {!editingUser && (
+                <div className="announcement-form-group">
+                  <label className="announcement-form-label">Email *</label>
+                  <input
+                    type="email"
+                    value={userForm.email}
+                    onChange={(e) => setUserForm({ ...userForm, email: e.target.value.toLowerCase() })}
+                    className="announcement-form-input"
+                    placeholder="Enter email address"
+                  />
+                </div>
+              )}
               <div className="announcement-form-group">
                 <label className="announcement-form-label">University ID *</label>
                 <input
@@ -1182,28 +1219,51 @@ const Admin = () => {
               </div>
             </div>
             <div className="announcement-modal-actions">
-              <button onClick={() => setShowUserModal(false)} className="btn btn-secondary">
+              <button onClick={() => {
+                setShowUserModal(false);
+                setSuccessMessage('');
+              }} className="btn btn-secondary">
                 Cancel
               </button>
               <button
                 onClick={async () => {
-                  if (!userForm.name || !userForm.universityId || (!editingUser && !userForm.password)) {
+                  if (!userForm.name || !userForm.universityId || (!editingUser && (!userForm.password || !userForm.email))) {
                     alert('Please fill in all required fields');
                     return;
                   }
                   try {
                     if (editingUser) {
-                      await axios.put(`${API_URL}/admin/management/users/${editingUser._id}`, {
+                      await axios.put(`${API_URL}/admin/users/${editingUser._id}`, {
                         name: userForm.name,
                         role: userForm.role,
                         phone: userForm.phone,
                         department: userForm.department,
                       }, getAuthHeaders());
+                      setSuccessMessage('User updated successfully');
                     } else {
-                      await axios.post(`${API_URL}/admin/management/users`, userForm, getAuthHeaders());
+                      // Map universityId to campusId for backend
+                      const payload = {
+                        ...userForm,
+                        campusId: userForm.universityId,
+                      };
+                      await axios.post(`${API_URL}/admin/users`, payload, getAuthHeaders());
+                      setSuccessMessage('User account created successfully');
+                      // Clear form
+                      setUserForm({
+                        universityId: '',
+                        email: '',
+                        password: '',
+                        name: '',
+                        role: 'student',
+                        phone: '',
+                        department: '',
+                      });
                     }
                     await fetchData();
-                    setShowUserModal(false);
+                    setTimeout(() => {
+                      setShowUserModal(false);
+                      setSuccessMessage('');
+                    }, 1500);
                   } catch (err) {
                     alert(err.response?.data?.message || 'Failed to save user');
                   }
@@ -1289,12 +1349,12 @@ const Admin = () => {
                   }
                   try {
                     if (editingPolice) {
-                      await axios.put(`${API_URL}/admin/management/police/${editingPolice._id}`, {
+                      await axios.put(`${API_URL}/admin/police/${editingPolice._id}`, {
                         name: policeForm.name,
                         badgeNumber: policeForm.badgeNumber,
                       }, getAuthHeaders());
                     } else {
-                      await axios.post(`${API_URL}/admin/management/police`, policeForm, getAuthHeaders());
+                      await axios.post(`${API_URL}/admin/police`, policeForm, getAuthHeaders());
                     }
                     await fetchData();
                     setShowPoliceModal(false);

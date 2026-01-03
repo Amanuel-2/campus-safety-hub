@@ -36,26 +36,40 @@ router.get('/users', requireAdmin, async (req, res) => {
 // POST create user
 router.post('/users', requireAdmin, async (req, res) => {
   try {
-    const { campusId, password, name, universityId, role, phone, department } = req.body;
+    const { campusId, password, name, email, universityId, role, phone, department } = req.body;
     
-    if (!campusId || !password || !name) {
-      return res.status(400).json({ message: 'Campus ID, password, and name are required' });
+    if (!campusId || !password || !name || !email) {
+      return res.status(400).json({ message: 'Campus ID, email, password, and name are required' });
     }
     
     if (password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
     
-    const normalizedCampusId = campusId.toUpperCase().trim();
+    // Validate email format
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Please provide a valid email address' });
+    }
     
-    // Check if user already exists
-    const existingUser = await User.findOne({ campusId: normalizedCampusId });
-    if (existingUser) {
+    const normalizedCampusId = campusId.toUpperCase().trim();
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Check if user already exists by campus ID
+    const existingUserByCampusId = await User.findOne({ campusId: normalizedCampusId });
+    if (existingUserByCampusId) {
       return res.status(400).json({ message: 'User with this Campus ID already exists' });
+    }
+    
+    // Check if user already exists by email
+    const existingUserByEmail = await User.findOne({ email: normalizedEmail });
+    if (existingUserByEmail) {
+      return res.status(400).json({ message: 'User with this email already exists' });
     }
     
     const user = new User({
       campusId: normalizedCampusId,
+      email: normalizedEmail,
       password,
       name: name.trim(),
       universityId: universityId ? universityId.trim() : normalizedCampusId,
@@ -79,7 +93,14 @@ router.post('/users', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error creating user:', error);
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'User with this Campus ID already exists' });
+      // Check which field caused the duplicate key error
+      if (error.keyPattern?.email) {
+        return res.status(400).json({ message: 'User with this email already exists' });
+      }
+      if (error.keyPattern?.campusId) {
+        return res.status(400).json({ message: 'User with this Campus ID already exists' });
+      }
+      return res.status(400).json({ message: 'A user with this information already exists' });
     }
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(e => e.message);

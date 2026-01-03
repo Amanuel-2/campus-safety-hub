@@ -7,7 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const StudentLogin = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    universityId: '',
+    email: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
@@ -29,13 +29,18 @@ const StudentLogin = () => {
 
       // Store tokens
       localStorage.setItem('userToken', response.data.token);
-      localStorage.setItem('campusToken', response.data.campusToken);
-      localStorage.setItem('userId', response.data.user.id);
+      if (response.data.campusToken) {
+        localStorage.setItem('campusToken', response.data.campusToken);
+      }
+      const userId = response.data.userInfo?.id || response.data.user?.id;
+      if (userId) {
+        localStorage.setItem('userId', userId);
+      }
 
       // Redirect to user home
       navigate('/user/home');
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid campus ID or password. Please try again.');
+      setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -62,8 +67,8 @@ const StudentLogin = () => {
                 <path d="M9 12l2 2 4-4"/>
               </svg>
             </div>
-            <h1 className="auth-title">Student Login</h1>
-            <p className="auth-subtitle">Sign in with your campus ID</p>
+            <h1 className="auth-title">User Login</h1>
+            <p className="auth-subtitle">Sign in with your email</p>
           </div>
 
           {error && (
@@ -79,22 +84,21 @@ const StudentLogin = () => {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">University ID Number</label>
+              <label className="form-label">Email Address</label>
               <div className="input-wrapper">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
                 </svg>
                 <input
-                  type="text"
-                  name="universityId"
-                  value={formData.universityId}
+                  type="email"
+                  name="email"
+                  value={formData.email}
                   onChange={handleChange}
                   className="form-input with-icon"
-                  placeholder="Enter your university ID"
+                  placeholder="Enter your email address"
                   required
-                  autoComplete="username"
-                  style={{ textTransform: 'uppercase' }}
+                  autoComplete="email"
                 />
               </div>
             </div>

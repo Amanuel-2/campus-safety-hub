@@ -113,29 +113,38 @@ router.post('/register', registrationLimiter, async (req, res) => {
   }
 });
 
-// POST login - User login
+// POST login - User login (supports both email and campusId)
 router.post('/login', loginLimiter, async (req, res) => {
   try {
-    const { campusId, password } = req.body;
+    const { email, password, campusId } = req.body;
     
-    if (!campusId || !password) {
-      return res.status(400).json({ message: 'Campus ID and password are required' });
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
     }
     
-    const normalizedCampusId = campusId.toUpperCase().trim();
+    if (!email && !campusId) {
+      return res.status(400).json({ message: 'Email or Campus ID is required' });
+    }
     
-    // Find user
-    const user = await User.findOne({ campusId: normalizedCampusId });
+    // Find user by email (preferred) or campusId (backward compatibility)
+    let user;
+    if (email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      user = await User.findOne({ email: normalizedEmail });
+    } else if (campusId) {
+      const normalizedCampusId = campusId.toUpperCase().trim();
+      user = await User.findOne({ campusId: normalizedCampusId });
+    }
     
     if (!user) {
-      return res.status(401).json({ message: 'Invalid campus ID or password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
     
     // Check password
     const isMatch = await user.comparePassword(password);
     
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid campus ID or password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
     
     // Update last login
@@ -147,8 +156,11 @@ router.post('/login', loginLimiter, async (req, res) => {
     const campusToken = user.generateCampusToken();
     const token = jwt.sign(
       { 
-        id: user._id, 
+        id: user._id,
+        userId: user._id,
         campusId: user.campusId,
+        email: user.email,
+        role: user.role,
         verified: user.isVerified 
       },
       JWT_SECRET,
@@ -158,9 +170,19 @@ router.post('/login', loginLimiter, async (req, res) => {
     res.json({
       token,
       campusToken,
+      userInfo: {
+        id: user._id,
+        userId: user._id,
+        campusId: user.campusId,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        isVerified: user.isVerified,
+      },
       user: {
         id: user._id,
         campusId: user.campusId,
+        email: user.email,
         name: user.name,
         role: user.role,
         isVerified: user.isVerified,
