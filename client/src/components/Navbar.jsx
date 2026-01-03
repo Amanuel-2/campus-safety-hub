@@ -5,8 +5,8 @@ const Navbar = () => {
   
   const links = [
     { to: '/', label: 'Home' },
+    { to: '/announcements', label: 'Announcements' },
     { to: '/report', label: 'Report Incident' },
-    { to: '/lost-found', label: 'Lost & Found' },
     { to: '/map', label: 'Map View' },
     { to: '/admin', label: 'Admin' },
   ];

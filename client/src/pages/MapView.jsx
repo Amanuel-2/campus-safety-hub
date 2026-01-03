@@ -38,15 +38,11 @@ const createIcon = (color) => new L.DivIcon({
 });
 
 const incidentIcon = createIcon('#ff4757');
-const lostIcon = createIcon('#ff6b35');
-const foundIcon = createIcon('#26de81');
 
 const MapView = () => {
   const [incidents, setIncidents] = useState([]);
-  const [lostItems, setLostItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showIncidents, setShowIncidents] = useState(true);
-  const [showLostItems, setShowLostItems] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
 
   const defaultCenter = [9.0305, 38.7633];
@@ -57,12 +53,8 @@ const MapView = () => {
 
   const fetchData = async () => {
     try {
-      const [incidentsRes, lostItemsRes] = await Promise.all([
-        axios.get(`${API_URL}/incidents`),
-        axios.get(`${API_URL}/lost-items`),
-      ]);
+      const incidentsRes = await axios.get(`${API_URL}/incidents`);
       setIncidents(incidentsRes.data);
-      setLostItems(lostItemsRes.data);
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {
@@ -81,7 +73,6 @@ const MapView = () => {
   };
 
   const incidentsWithLocation = incidents.filter(i => i.location?.lat && i.location?.lng);
-  const lostItemsWithLocation = lostItems.filter(i => i.location?.lat && i.location?.lng);
 
   return (
     <div className="app-container">
@@ -90,7 +81,7 @@ const MapView = () => {
         <div className="map-sidebar">
           <div className="sidebar-header">
             <h2>Campus Map</h2>
-            <p>View incidents and lost items across campus</p>
+            <p>View incidents across campus</p>
           </div>
 
           <div className="layer-controls">
@@ -107,18 +98,6 @@ const MapView = () => {
                 <span className="count">{incidentsWithLocation.length}</span>
               </span>
             </label>
-            <label className="layer-toggle">
-              <input
-                type="checkbox"
-                checked={showLostItems}
-                onChange={(e) => setShowLostItems(e.target.checked)}
-              />
-              <span className="toggle-indicator lost-found" />
-              <span className="toggle-text">
-                Lost & Found
-                <span className="count">{lostItemsWithLocation.length}</span>
-              </span>
-            </label>
           </div>
 
           <div className="legend">
@@ -127,14 +106,6 @@ const MapView = () => {
               <div className="legend-item">
                 <span className="legend-dot" style={{ background: '#ff4757' }} />
                 Incidents
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot" style={{ background: '#ff6b35' }} />
-                Lost Items
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot" style={{ background: '#26de81' }} />
-                Found Items
               </div>
             </div>
           </div>
@@ -147,7 +118,7 @@ const MapView = () => {
               </div>
             ) : (
               <div className="activity-list">
-                {[...incidents.slice(0, 3), ...lostItems.slice(0, 3)]
+                {incidents
                   .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
                   .slice(0, 5)
                   .map((item, index) => (
@@ -159,17 +130,13 @@ const MapView = () => {
                       <div
                         className="activity-indicator"
                         style={{
-                          background: item.severity
-                            ? '#ff4757'
-                            : item.status === 'found'
-                            ? '#26de81'
-                            : '#ff6b35',
+                          background: '#ff4757',
                         }}
                       />
                       <div className="activity-content">
                         <span className="activity-title">{item.title}</span>
                         <span className="activity-meta">
-                          {item.severity ? 'Incident' : item.status === 'found' ? 'Found' : 'Lost'} •{' '}
+                          Incident •{' '}
                           {new Date(item.createdAt).toLocaleDateString()}
                         </span>
                       </div>
@@ -222,39 +189,6 @@ const MapView = () => {
                         )}
                         <p className="popup-date">
                           {new Date(incident.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-
-              {showLostItems &&
-                lostItemsWithLocation.map((item) => (
-                  <Marker
-                    key={item._id}
-                    position={[item.location.lat, item.location.lng]}
-                    icon={item.status === 'found' ? foundIcon : lostIcon}
-                  >
-                    <Popup>
-                      <div className="popup-content">
-                        <div className="popup-header">
-                          <span
-                            className="popup-badge"
-                            style={{
-                              background: item.status === 'found' ? '#26de81' : '#ff6b35',
-                            }}
-                          >
-                            {item.status}
-                          </span>
-                          <span className="popup-type">{item.category}</span>
-                        </div>
-                        <h4 className="popup-title">{item.title}</h4>
-                        <p className="popup-desc">{item.description}</p>
-                        {item.locationDescription && (
-                          <p className="popup-location">📍 {item.locationDescription}</p>
-                        )}
-                        <p className="popup-date">
-                          {new Date(item.createdAt).toLocaleString()}
                         </p>
                       </div>
                     </Popup>
@@ -337,10 +271,6 @@ const MapView = () => {
           background: rgba(255, 71, 87, 0.3);
         }
         
-        .toggle-indicator.lost-found {
-          background: rgba(255, 107, 53, 0.3);
-        }
-        
         .layer-toggle input:checked + .toggle-indicator {
           border-color: currentColor;
         }
@@ -348,11 +278,6 @@ const MapView = () => {
         .layer-toggle input:checked + .toggle-indicator.incidents {
           background: #ff4757;
           border-color: #ff4757;
-        }
-        
-        .layer-toggle input:checked + .toggle-indicator.lost-found {
-          background: #ff6b35;
-          border-color: #ff6b35;
         }
         
         .toggle-text {

@@ -1,7 +1,58 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const Home = () => {
+  const [announcements, setAnnouncements] = useState([]);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+
+  useEffect(() => {
+    fetchLatestAnnouncements();
+  }, []);
+
+  const fetchLatestAnnouncements = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/announcements`, {
+        params: { limit: 5 }
+      });
+      setAnnouncements(response.data.slice(0, 5));
+    } catch (err) {
+      console.error('Failed to fetch announcements:', err);
+    } finally {
+      setLoadingAnnouncements(false);
+    }
+  };
+
+  const getCategoryLabel = (category) => {
+    const labels = {
+      safety_alert: 'Safety Alert',
+      awareness: 'Awareness',
+      rule_update: 'Rule Update',
+      general: 'General',
+    };
+    return labels[category] || category;
+  };
+
+  const getCategoryColor = (category) => {
+    const colors = {
+      safety_alert: 'var(--accent-danger)',
+      awareness: 'var(--accent-secondary)',
+      rule_update: 'var(--accent-warning)',
+      general: 'var(--accent-primary)',
+    };
+    return colors[category] || colors.general;
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
   const features = [
     {
       to: '/report',
@@ -16,21 +67,6 @@ const Home = () => {
       description: 'Report safety concerns, suspicious activities, or emergencies on campus',
       color: 'var(--accent-danger)',
       gradient: 'linear-gradient(135deg, rgba(255, 71, 87, 0.15) 0%, rgba(255, 107, 53, 0.15) 100%)',
-    },
-    {
-      to: '/lost-found',
-      icon: (
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-          <path d="M11 8v6"/>
-          <path d="M8 11h6"/>
-        </svg>
-      ),
-      title: 'Lost & Found',
-      description: 'Report lost items or browse found items to recover your belongings',
-      color: 'var(--accent-secondary)',
-      gradient: 'linear-gradient(135deg, rgba(78, 205, 196, 0.15) 0%, rgba(38, 222, 129, 0.15) 100%)',
     },
     {
       to: '/map',
@@ -79,7 +115,7 @@ const Home = () => {
               <span>Our Priority</span>
             </h1>
             <p className="hero-subtitle">
-              A unified platform for reporting incidents, finding lost items, and keeping our campus community safe and connected.
+              A unified platform for reporting incidents and keeping our campus community safe and connected.
             </p>
             <div className="hero-stats">
               <div className="stat">
@@ -99,6 +135,42 @@ const Home = () => {
             </div>
           </div>
         </div>
+
+        {!loadingAnnouncements && announcements.length > 0 && (
+          <div className="home-announcements">
+            <div className="announcements-header">
+              <h2 className="announcements-title">Latest Announcements</h2>
+              <Link to="/announcements" className="announcements-link">
+                View all announcements
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                  <polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </Link>
+            </div>
+            <div className="announcements-preview-grid">
+              {announcements.map((announcement) => (
+                <div key={announcement._id} className="announcement-preview-card">
+                  <div className="announcement-preview-header">
+                    <span
+                      className="announcement-preview-badge"
+                      style={{ background: getCategoryColor(announcement.category) }}
+                    >
+                      {getCategoryLabel(announcement.category)}
+                    </span>
+                    <span className="announcement-preview-date">{formatDate(announcement.createdAt)}</span>
+                  </div>
+                  <h3 className="announcement-preview-title">{announcement.title}</h3>
+                  <p className="announcement-preview-content">
+                    {announcement.content.length > 100
+                      ? announcement.content.substring(0, 100) + '...'
+                      : announcement.content}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
         <div className="home-features">
           <div className="features-grid">
@@ -235,6 +307,108 @@ const Home = () => {
           background: var(--border-color);
         }
         
+        .home-announcements {
+          padding: 3rem 2rem;
+          background: var(--bg-primary);
+          border-top: 1px solid var(--border-color);
+        }
+        
+        .announcements-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 2rem;
+          max-width: 1200px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+        
+        .announcements-title {
+          font-size: 2rem;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0;
+        }
+        
+        .announcements-link {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: var(--accent-primary);
+          font-weight: 500;
+          text-decoration: none;
+          transition: all 0.2s ease;
+        }
+        
+        .announcements-link:hover {
+          gap: 0.75rem;
+          color: var(--accent-secondary);
+        }
+        
+        .announcements-preview-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 1.5rem;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+        
+        .announcement-preview-card {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: 1.25rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          transition: all 0.3s ease;
+        }
+        
+        .announcement-preview-card:hover {
+          border-color: var(--accent-primary);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          transform: translateY(-2px);
+        }
+        
+        .announcement-preview-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        
+        .announcement-preview-badge {
+          padding: 0.25rem 0.625rem;
+          border-radius: var(--radius-full);
+          font-size: 0.625rem;
+          font-weight: 600;
+          color: white;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        
+        .announcement-preview-date {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          font-family: var(--font-mono);
+          white-space: nowrap;
+        }
+        
+        .announcement-preview-title {
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin: 0;
+          line-height: 1.4;
+        }
+        
+        .announcement-preview-content {
+          font-size: 0.875rem;
+          color: var(--text-secondary);
+          line-height: 1.6;
+          margin: 0;
+        }
+        
         .home-features {
           flex: 1;
           padding: 3rem 2rem;
@@ -243,7 +417,7 @@ const Home = () => {
         
         .features-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(3, 1fr);
           gap: 1.5rem;
           max-width: 1200px;
           margin: 0 auto;
@@ -357,6 +531,16 @@ const Home = () => {
           
           .stat-divider {
             display: none;
+          }
+          
+          .announcements-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+          }
+          
+          .announcements-preview-grid {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>

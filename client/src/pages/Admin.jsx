@@ -9,16 +9,25 @@ const Admin = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('incidents');
   const [incidents, setIncidents] = useState([]);
-  const [lostItems, setLostItems] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalIncidents: 0,
     pendingIncidents: 0,
-    totalLostItems: 0,
-    foundItems: 0,
+    totalAnnouncements: 0,
   });
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState(null);
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: '',
+    content: '',
+    category: 'general',
+    imageUrl: '',
+  });
+  const [imagePreview, setImagePreview] = useState(null);
+  const [submittingAnnouncement, setSubmittingAnnouncement] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -35,19 +44,18 @@ const Admin = () => {
 
   const fetchData = async () => {
     try {
-      const [incidentsRes, lostItemsRes] = await Promise.all([
+      const [incidentsRes, announcementsRes] = await Promise.all([
         axios.get(`${API_URL}/incidents`, getAuthHeaders()),
-        axios.get(`${API_URL}/lost-items`, getAuthHeaders()),
+        axios.get(`${API_URL}/announcements`, getAuthHeaders()),
       ]);
       
       setIncidents(incidentsRes.data);
-      setLostItems(lostItemsRes.data);
+      setAnnouncements(announcementsRes.data);
       
       setStats({
         totalIncidents: incidentsRes.data.length,
         pendingIncidents: incidentsRes.data.filter(i => i.status === 'pending').length,
-        totalLostItems: lostItemsRes.data.length,
-        foundItems: lostItemsRes.data.filter(i => i.status === 'found').length,
+        totalAnnouncements: announcementsRes.data.length,
       });
     } catch (err) {
       console.error('Failed to fetch data:', err);
@@ -71,17 +79,6 @@ const Admin = () => {
     }
   };
 
-  const updateLostItemStatus = async (id, status) => {
-    try {
-      await axios.patch(`${API_URL}/lost-items/${id}`, { status }, getAuthHeaders());
-      setLostItems(prev =>
-        prev.map(i => (i._id === id ? { ...i, status } : i))
-      );
-    } catch (err) {
-      console.error('Failed to update item:', err);
-    }
-  };
-
   const deleteIncident = async (id) => {
     if (!confirm('Are you sure you want to delete this incident?')) return;
     try {
@@ -89,16 +86,6 @@ const Admin = () => {
       setIncidents(prev => prev.filter(i => i._id !== id));
     } catch (err) {
       console.error('Failed to delete incident:', err);
-    }
-  };
-
-  const deleteLostItem = async (id) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
-    try {
-      await axios.delete(`${API_URL}/lost-items/${id}`, getAuthHeaders());
-      setLostItems(prev => prev.filter(i => i._id !== id));
-    } catch (err) {
-      console.error('Failed to delete item:', err);
     }
   };
 
@@ -132,6 +119,138 @@ const Admin = () => {
 
   const incidentStatuses = ['pending', 'investigating', 'resolved'];
 
+  const categories = [
+    { value: 'safety_alert', label: 'Safety Alert' },
+    { value: 'awareness', label: 'Awareness' },
+    { value: 'rule_update', label: 'Rule Update' },
+    { value: 'general', label: 'General' },
+  ];
+
+  const getCategoryLabel = (category) => {
+    return categories.find(c => c.value === category)?.label || category;
+  };
+
+  const getCategoryColor = (category) => {
+    const colors = {
+      safety_alert: 'var(--accent-danger)',
+      awareness: 'var(--accent-secondary)',
+      rule_update: 'var(--accent-warning)',
+      general: 'var(--accent-primary)',
+    };
+    return colors[category] || colors.general;
+  };
+
+  const openAnnouncementModal = (announcement = null) => {
+    if (announcement) {
+      setEditingAnnouncement(announcement);
+      setAnnouncementForm({
+        title: announcement.title,
+        content: announcement.content,
+        category: announcement.category,
+        imageUrl: announcement.imageUrl || '',
+      });
+      setImagePreview(announcement.imageUrl || null);
+    } else {
+      setEditingAnnouncement(null);
+      setAnnouncementForm({
+        title: '',
+        content: '',
+        category: 'general',
+        imageUrl: '',
+      });
+      setImagePreview(null);
+    }
+    setShowAnnouncementModal(true);
+  };
+
+  const closeAnnouncementModal = () => {
+    setShowAnnouncementModal(false);
+    setEditingAnnouncement(null);
+    setAnnouncementForm({
+      title: '',
+      content: '',
+      category: 'general',
+      imageUrl: '',
+    });
+    setImagePreview(null);
+  };
+
+  const handleAnnouncementFormChange = (e) => {
+    const { name, value } = e.target;
+    setAnnouncementForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Image size must be less than 3MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result;
+      setAnnouncementForm(prev => ({ ...prev, imageUrl: base64String }));
+      setImagePreview(base64String);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setAnnouncementForm(prev => ({ ...prev, imageUrl: '' }));
+    setImagePreview(null);
+  };
+
+  const submitAnnouncement = async () => {
+    if (!announcementForm.title.trim() || !announcementForm.content.trim()) {
+      alert('Title and content are required');
+      return;
+    }
+
+    setSubmittingAnnouncement(true);
+    try {
+      if (editingAnnouncement) {
+        await axios.put(
+          `${API_URL}/admin/announcements/${editingAnnouncement._id}`,
+          announcementForm,
+          getAuthHeaders()
+        );
+      } else {
+        await axios.post(
+          `${API_URL}/admin/announcements`,
+          announcementForm,
+          getAuthHeaders()
+        );
+      }
+      await fetchData();
+      closeAnnouncementModal();
+    } catch (err) {
+      console.error('Failed to save announcement:', err);
+      alert(err.response?.data?.message || 'Failed to save announcement');
+    } finally {
+      setSubmittingAnnouncement(false);
+    }
+  };
+
+  const deleteAnnouncement = async (id) => {
+    if (!confirm('Are you sure you want to delete this announcement?')) return;
+    try {
+      await axios.delete(`${API_URL}/admin/announcements/${id}`, getAuthHeaders());
+      setAnnouncements(prev => prev.filter(a => a._id !== id));
+      setStats(prev => ({ ...prev, totalAnnouncements: prev.totalAnnouncements - 1 }));
+    } catch (err) {
+      console.error('Failed to delete announcement:', err);
+      alert('Failed to delete announcement');
+    }
+  };
+
   if (loading) {
     return (
       <div className="app-container">
@@ -150,7 +269,7 @@ const Admin = () => {
         <div className="admin-header">
           <div>
             <h1 className="page-title">Admin Dashboard</h1>
-            <p className="page-subtitle">Manage incidents and lost items</p>
+            <p className="page-subtitle">Manage incidents and announcements</p>
           </div>
           <button onClick={handleLogout} className="btn btn-secondary">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -189,27 +308,17 @@ const Admin = () => {
             </div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon lost">
+            <div className="stat-icon announcements">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
             </div>
             <div className="stat-info">
-              <span className="stat-value">{stats.totalLostItems}</span>
-              <span className="stat-label">Lost/Found Items</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon found">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                <polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-            </div>
-            <div className="stat-info">
-              <span className="stat-value">{stats.foundItems}</span>
-              <span className="stat-label">Items Returned</span>
+              <span className="stat-value">{stats.totalAnnouncements}</span>
+              <span className="stat-label">Announcements</span>
             </div>
           </div>
         </div>
@@ -225,185 +334,196 @@ const Admin = () => {
             Incidents ({incidents.length})
           </button>
           <button
-            className={`tab ${activeTab === 'lostfound' ? 'active' : ''}`}
-            onClick={() => setActiveTab('lostfound')}
+            className={`tab ${activeTab === 'announcements' ? 'active' : ''}`}
+            onClick={() => setActiveTab('announcements')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
-            Lost & Found ({lostItems.length})
+            Announcements ({announcements.length})
           </button>
         </div>
 
-        {activeTab === 'incidents' ? (
-          <div className="table-container animate-fade-in">
-            {incidents.length === 0 ? (
+        {activeTab === 'announcements' && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <button onClick={() => openAnnouncementModal()} className="btn btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Create Announcement
+            </button>
+          </div>
+        )}
+
+        <div className="table-container animate-fade-in">
+          {activeTab === 'incidents' ? (
+            incidents.length === 0 ? (
+            <div className="empty-state">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <h3>No incidents reported</h3>
+              <p>Incidents will appear here when reported</p>
+            </div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incidents.map((incident) => (
+                  <tr 
+                    key={incident._id}
+                    className={incident.images && incident.images.length > 0 ? 'has-images' : ''}
+                    onClick={() => handleIncidentRowClick(incident)}
+                    style={{ cursor: incident.images && incident.images.length > 0 ? 'pointer' : 'default' }}
+                  >
+                    <td>
+                      <div className="cell-title">
+                        {incident.title}
+                        {incident.images && incident.images.length > 0 && (
+                          <span className="image-badge">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                              <circle cx="8.5" cy="8.5" r="1.5"/>
+                              <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                            {incident.images.length} photo{incident.images.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="cell-subtitle">{incident.description.slice(0, 50)}...</div>
+                    </td>
+                    <td>
+                      <span className="type-label">{incident.type.replace('_', ' ')}</span>
+                    </td>
+                    <td>
+                      <span className={`badge ${getSeverityClass(incident.severity)}`}>
+                        {incident.severity}
+                      </span>
+                    </td>
+                    <td>
+                      <select
+                        value={incident.status}
+                        onChange={(e) => updateIncidentStatus(incident._id, e.target.value)}
+                        className="status-select"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {incidentStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <span className="date-cell">
+                        {new Date(incident.createdAt).toLocaleDateString()}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteIncident(incident._id);
+                        }}
+                        className="btn btn-danger btn-sm"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              </table>
+            )
+          ) : (
+            announcements.length === 0 ? (
               <div className="empty-state">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
                 </svg>
-                <h3>No incidents reported</h3>
-                <p>Incidents will appear here when reported</p>
+                <h3>No announcements</h3>
+                <p>Create your first announcement to get started</p>
               </div>
             ) : (
               <table className="table">
                 <thead>
                   <tr>
                     <th>Title</th>
-                    <th>Type</th>
-                    <th>Severity</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {incidents.map((incident) => (
-                    <tr 
-                      key={incident._id}
-                      className={incident.images && incident.images.length > 0 ? 'has-images' : ''}
-                      onClick={() => handleIncidentRowClick(incident)}
-                      style={{ cursor: incident.images && incident.images.length > 0 ? 'pointer' : 'default' }}
-                    >
-                      <td>
-                        <div className="cell-title">
-                          {incident.title}
-                          {incident.images && incident.images.length > 0 && (
-                            <span className="image-badge">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                                <circle cx="8.5" cy="8.5" r="1.5"/>
-                                <polyline points="21 15 16 10 5 21"/>
-                              </svg>
-                              {incident.images.length} photo{incident.images.length > 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                        <div className="cell-subtitle">{incident.description.slice(0, 50)}...</div>
-                      </td>
-                      <td>
-                        <span className="type-label">{incident.type.replace('_', ' ')}</span>
-                      </td>
-                      <td>
-                        <span className={`badge ${getSeverityClass(incident.severity)}`}>
-                          {incident.severity}
-                        </span>
-                      </td>
-                      <td>
-                        <select
-                          value={incident.status}
-                          onChange={(e) => updateIncidentStatus(incident._id, e.target.value)}
-                          className="status-select"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {incidentStatuses.map((status) => (
-                            <option key={status} value={status}>
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <span className="date-cell">
-                          {new Date(incident.createdAt).toLocaleDateString()}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteIncident(incident._id);
-                          }}
-                          className="btn btn-danger btn-sm"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        ) : (
-          <div className="table-container animate-fade-in">
-            {lostItems.length === 0 ? (
-              <div className="empty-state">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="11" cy="11" r="8"/>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <h3>No lost items reported</h3>
-                <p>Lost and found items will appear here</p>
-              </div>
-            ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
                     <th>Category</th>
-                    <th>Status</th>
-                    <th>Contact</th>
                     <th>Date</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lostItems.map((item) => (
-                    <tr key={item._id}>
+                  {announcements.map((announcement) => (
+                    <tr key={announcement._id}>
                       <td>
-                        <div className="cell-title">{item.title}</div>
-                        <div className="cell-subtitle">{item.description.slice(0, 50)}...</div>
+                        <div className="cell-title">{announcement.title}</div>
+                        <div className="cell-subtitle">{announcement.content.slice(0, 60)}...</div>
                       </td>
                       <td>
-                        <span className="type-label">{item.category}</span>
-                      </td>
-                      <td>
-                        <select
-                          value={item.status}
-                          onChange={(e) => updateLostItemStatus(item._id, e.target.value)}
-                          className={`status-select ${item.status}`}
+                        <span
+                          className="category-badge"
+                          style={{ background: getCategoryColor(announcement.category) }}
                         >
-                          <option value="lost">Lost</option>
-                          <option value="found">Found</option>
-                          <option value="claimed">Claimed</option>
-                        </select>
-                      </td>
-                      <td>
-                        <div className="contact-cell">
-                          <span>{item.contactName}</span>
-                          <span className="cell-subtitle">{item.contactEmail}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="date-cell">
-                          {new Date(item.createdAt).toLocaleDateString()}
+                          {getCategoryLabel(announcement.category)}
                         </span>
                       </td>
                       <td>
-                        <button
-                          onClick={() => deleteLostItem(item._id)}
-                          className="btn btn-danger btn-sm"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                          </svg>
-                        </button>
+                        <span className="date-cell">
+                          {new Date(announcement.createdAt).toLocaleDateString()}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            onClick={() => openAnnouncementModal(announcement)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteAnnouncement(announcement._id)}
+                            className="btn btn-danger btn-sm"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6"/>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            )}
-          </div>
-        )}
+            )
+          )}
+        </div>
       </div>
 
       {/* Image Modal */}
@@ -448,6 +568,90 @@ const Admin = () => {
         </div>
       )}
 
+      {/* Announcement Modal */}
+      {showAnnouncementModal && (
+        <div className="announcement-modal-overlay" onClick={closeAnnouncementModal}>
+          <div className="announcement-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="announcement-modal-header">
+              <h3 className="announcement-modal-title">
+                {editingAnnouncement ? 'Edit Announcement' : 'Create Announcement'}
+              </h3>
+              <button onClick={closeAnnouncementModal} className="announcement-modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="announcement-modal-content">
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Title *</label>
+                <input
+                  type="text"
+                  name="title"
+                  value={announcementForm.title}
+                  onChange={handleAnnouncementFormChange}
+                  className="announcement-form-input"
+                  placeholder="Enter announcement title"
+                />
+              </div>
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Content *</label>
+                <textarea
+                  name="content"
+                  value={announcementForm.content}
+                  onChange={handleAnnouncementFormChange}
+                  className="announcement-form-textarea"
+                  placeholder="Enter announcement content"
+                />
+              </div>
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Category</label>
+                <select
+                  name="category"
+                  value={announcementForm.category}
+                  onChange={handleAnnouncementFormChange}
+                  className="announcement-form-select"
+                >
+                  {categories.map(cat => (
+                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="announcement-form-group">
+                <label className="announcement-form-label">Image (Optional)</label>
+                {!imagePreview ? (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="announcement-form-input"
+                  />
+                ) : (
+                  <div className="announcement-image-preview">
+                    <img src={imagePreview} alt="Preview" />
+                    <button onClick={removeImage} className="announcement-image-remove">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="announcement-modal-actions">
+              <button onClick={closeAnnouncementModal} className="btn btn-secondary" disabled={submittingAnnouncement}>
+                Cancel
+              </button>
+              <button onClick={submitAnnouncement} className="btn btn-primary" disabled={submittingAnnouncement}>
+                {submittingAnnouncement ? 'Saving...' : editingAnnouncement ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .admin-header {
           display: flex;
@@ -458,7 +662,7 @@ const Admin = () => {
         
         .stats-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(3, 1fr);
           gap: 1.5rem;
           margin-bottom: 2rem;
         }
@@ -498,14 +702,20 @@ const Admin = () => {
           color: var(--accent-warning);
         }
         
-        .stat-icon.lost {
-          background: rgba(255, 107, 53, 0.15);
-          color: var(--accent-primary);
+        .stat-icon.announcements {
+          background: rgba(78, 205, 196, 0.15);
+          color: var(--accent-secondary);
         }
         
-        .stat-icon.found {
-          background: rgba(38, 222, 129, 0.15);
-          color: var(--accent-success);
+        .category-badge {
+          display: inline-block;
+          padding: 0.375rem 0.75rem;
+          border-radius: var(--radius-full);
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: white;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
         
         .stat-info {
@@ -612,16 +822,6 @@ const Admin = () => {
           border-color: var(--accent-primary);
         }
         
-        .status-select.lost {
-          border-color: var(--accent-danger);
-          color: var(--accent-danger);
-        }
-        
-        .status-select.found,
-        .status-select.claimed {
-          border-color: var(--accent-success);
-          color: var(--accent-success);
-        }
         
         .date-cell {
           font-family: var(--font-mono);
@@ -659,6 +859,144 @@ const Admin = () => {
             flex-direction: column;
             gap: 1rem;
           }
+        }
+        
+        /* Announcement Modal Styles */
+        .announcement-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+          padding: 2rem;
+          animation: fadeIn 0.2s ease-out;
+        }
+        
+        .announcement-modal {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          max-width: 700px;
+          width: 100%;
+          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
+          animation: slideUp 0.3s ease-out;
+        }
+        
+        .announcement-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1.5rem;
+          border-bottom: 1px solid var(--border-color);
+        }
+        
+        .announcement-modal-title {
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin: 0;
+        }
+        
+        .announcement-modal-close {
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .announcement-modal-close:hover {
+          background: var(--accent-danger);
+          border-color: var(--accent-danger);
+          color: white;
+        }
+        
+        .announcement-modal-content {
+          padding: 1.5rem;
+          overflow-y: auto;
+          flex: 1;
+        }
+        
+        .announcement-form-group {
+          margin-bottom: 1.5rem;
+        }
+        
+        .announcement-form-label {
+          display: block;
+          font-weight: 500;
+          color: var(--text-primary);
+          margin-bottom: 0.5rem;
+        }
+        
+        .announcement-form-input,
+        .announcement-form-textarea,
+        .announcement-form-select {
+          width: 100%;
+          padding: 0.75rem;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          color: var(--text-primary);
+          font-size: 0.875rem;
+          font-family: inherit;
+        }
+        
+        .announcement-form-textarea {
+          min-height: 150px;
+          resize: vertical;
+        }
+        
+        .announcement-form-input:focus,
+        .announcement-form-textarea:focus,
+        .announcement-form-select:focus {
+          outline: none;
+          border-color: var(--accent-primary);
+        }
+        
+        .announcement-image-preview {
+          margin-top: 1rem;
+          position: relative;
+        }
+        
+        .announcement-image-preview img {
+          width: 100%;
+          max-height: 300px;
+          object-fit: contain;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-color);
+        }
+        
+        .announcement-image-remove {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          background: var(--accent-danger);
+          color: white;
+          border: none;
+          border-radius: var(--radius-md);
+          padding: 0.5rem;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .announcement-modal-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+          padding: 1.5rem;
+          border-top: 1px solid var(--border-color);
         }
         
         /* Image Modal Styles */

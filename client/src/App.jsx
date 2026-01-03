@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
+import Announcements from './pages/Announcements';
 import ReportIncident from './pages/ReportIncident';
-import LostAndFound from './pages/LostAndFound';
 import MapView from './pages/MapView';
 import Admin from './pages/Admin';
 import AdminLogin from './pages/AdminLogin';
@@ -12,8 +12,8 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/announcements" element={<Announcements />} />
         <Route path="/report" element={<ReportIncident />} />
-        <Route path="/lost-found" element={<LostAndFound />} />
         <Route path="/map" element={<MapView />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/login" element={<AdminLogin />} />
