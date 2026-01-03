@@ -106,7 +106,7 @@ const EmergencyModal = ({ isOpen, onClose }) => {
       if (err.response?.status === 429) {
         setError(err.response.data.message || 'Too many alerts. Please wait before sending another.');
       } else {
-        setError(err.response?.data?.message || 'Failed to send emergency alert. Please try again or call 911 directly.');
+        setError(err.response?.data?.message || 'Failed to send emergency alert. Please try again or call +251 9____ directly.');
       }
     } finally {
       setLoading(false);
@@ -137,7 +137,7 @@ const EmergencyModal = ({ isOpen, onClose }) => {
                 and legal consequences under campus policies and local laws.
               </p>
               <p className="warning-text">
-                For immediate life-threatening emergencies, call <strong>911</strong> first.
+                For immediate life-threatening emergencies, call <strong>+251 9____</strong> first.
               </p>
               <div className="warning-legal">
                 <p>By proceeding, you confirm:</p>
@@ -304,7 +304,7 @@ const EmergencyModal = ({ isOpen, onClose }) => {
             </p>
             <p className="success-note">
               <strong>Remember:</strong> For immediate life-threatening emergencies, 
-              always call <strong>911</strong> first.
+              always call <strong>+251 9____</strong> first.
             </p>
             <button onClick={onClose} className="btn btn-primary btn-lg">
               Close
