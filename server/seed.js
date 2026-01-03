@@ -3,7 +3,6 @@ require('dotenv').config();
 
 const Admin = require('./models/Admin');
 const Incident = require('./models/Incident');
-const LostItem = require('./models/LostItem');
 const CampusDatabase = require('./models/CampusDatabase');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/campus_safety_hub';
@@ -16,7 +15,6 @@ const seedData = async () => {
     // Clear existing data
     await Admin.deleteMany({});
     await Incident.deleteMany({});
-    await LostItem.deleteMany({});
     await CampusDatabase.deleteMany({});
     console.log('✓ Cleared existing data');
 
@@ -90,58 +88,6 @@ const seedData = async () => {
 
     await Incident.insertMany(incidents);
     console.log(`✓ Created ${incidents.length} sample incidents`);
-
-    // Create sample lost items
-    const lostItems = [
-      {
-        title: 'Black iPhone 15 Pro',
-        description: 'Black iPhone 15 Pro with a cracked screen protector. Has a dark blue case with a card holder on the back.',
-        category: 'electronics',
-        status: 'lost',
-        location: { lat: 9.0305, lng: 38.7638 },
-        locationDescription: 'Cafeteria or Library',
-        dateOccurred: new Date('2026-01-01'),
-        contactName: 'Michael Brown',
-        contactEmail: 'michael.b@campus.edu',
-        contactPhone: '+1234567890',
-      },
-      {
-        title: 'Blue North Face Backpack',
-        description: 'Navy blue North Face backpack containing textbooks and a calculator. Has a keychain with a small teddy bear.',
-        category: 'bags',
-        status: 'found',
-        location: { lat: 9.0298, lng: 38.7625 },
-        locationDescription: 'Found near Student Center',
-        dateOccurred: new Date('2026-01-02'),
-        contactName: 'Campus Security',
-        contactEmail: 'security@campus.edu',
-      },
-      {
-        title: 'Student ID Card - Emma Wilson',
-        description: 'Student ID card belonging to Emma Wilson, Computer Science department. Card number ends in 4521.',
-        category: 'documents',
-        status: 'found',
-        location: { lat: 9.0312, lng: 38.7632 },
-        locationDescription: 'Registrar Office',
-        dateOccurred: new Date('2025-12-30'),
-        contactName: 'Registrar Office',
-        contactEmail: 'registrar@campus.edu',
-      },
-      {
-        title: 'Car Keys with BMW fob',
-        description: 'Set of car keys with a BMW key fob and a house key. Has a small orange lanyard attached.',
-        category: 'keys',
-        status: 'lost',
-        location: { lat: 9.0290, lng: 38.7645 },
-        locationDescription: 'Gym or Swimming Pool area',
-        dateOccurred: new Date('2026-01-02'),
-        contactName: 'David Lee',
-        contactEmail: 'david.lee@campus.edu',
-      },
-    ];
-
-    await LostItem.insertMany(lostItems);
-    console.log(`✓ Created ${lostItems.length} sample lost/found items`);
 
     console.log('\n✓ Database seeded successfully!\n');
     process.exit(0);
