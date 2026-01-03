@@ -3,6 +3,8 @@ const router = express.Router();
 const crypto = require('crypto');
 const EmergencyAlert = require('../models/EmergencyAlert');
 const { emergencyAlertLimiter } = require('../middleware/rateLimiter');
+const { broadcastEmergencyAlert } = require('../services/socketService');
+const { sendEmergencyEmail } = require('../services/emailService');
 
 const CAMPUS_TOKEN_SECRET = process.env.CAMPUS_TOKEN_SECRET || 'campus_verification_secret_2026';
 
@@ -23,6 +25,7 @@ const generateDeviceFingerprint = (req) => {
 router.post('/alert', emergencyAlertLimiter, async (req, res) => {
   try {
     const { 
+      locationId,
       building, 
       area, 
       coordinates, 
@@ -32,10 +35,10 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
       campusToken // Optional - proves verified device
     } = req.body;
     
-    // Location is required
-    if (!building) {
+    // Location is required (either locationId or building)
+    if (!locationId && !building) {
       return res.status(400).json({ 
-        message: 'Building location is required for emergency alerts' 
+        message: 'Location selection is required for emergency alerts. Please select a location on the campus map.' 
       });
     }
     
@@ -43,7 +46,8 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
     const alert = new EmergencyAlert({
       timestamp: new Date(),
       location: {
-        building: building.trim(),
+        locationId: locationId ? locationId.trim() : undefined,
+        building: building ? building.trim() : (locationId ? 'Selected Location' : undefined),
         area: area ? area.trim() : undefined,
         coordinates: coordinates || undefined,
       },
@@ -62,7 +66,22 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
     
     await alert.save();
     
-    // Log for admin notification (in production, send real-time notification)
+    // Broadcast real-time notification to all connected admins
+    try {
+      broadcastEmergencyAlert(alert);
+    } catch (error) {
+      console.error('Failed to broadcast emergency alert:', error);
+      // Don't fail the request if socket broadcast fails
+    }
+    
+    // Send backup email notification (non-blocking)
+    try {
+      sendEmergencyEmail(alert);
+    } catch (error) {
+      console.error('Failed to send email notification:', error);
+      // Don't fail the request if email fails
+    }
+    
     console.log(`🚨 EMERGENCY ALERT: ${alert._id} - ${building} - ${emergencyType}`);
     
     res.status(201).json({
@@ -142,6 +161,16 @@ router.patch('/:id', async (req, res) => {
     
     if (!alert) {
       return res.status(404).json({ message: 'Emergency alert not found' });
+    }
+    
+    // Broadcast status update to admins
+    if (status) {
+      try {
+        const { broadcastEmergencyUpdate } = require('../services/socketService');
+        broadcastEmergencyUpdate(alert._id, status);
+      } catch (error) {
+        console.error('Failed to broadcast status update:', error);
+      }
     }
     
     res.json(alert);

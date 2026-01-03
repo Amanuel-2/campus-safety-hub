@@ -1,7 +1,11 @@
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+
+const { initializeSocket } = require('./services/socketService');
+const { initializeEmailService } = require('./services/emailService');
 
 const incidentRoutes = require('./routes/incidents');
 const announcementRoutes = require('./routes/announcements');
@@ -11,6 +15,7 @@ const studentRoutes = require('./routes/students');
 const emergencyRoutes = require('./routes/emergency');
 
 const app = express();
+const httpServer = http.createServer(app);
 
 // Middleware
 app.use(cors());
@@ -20,6 +25,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Trust proxy for accurate IP addresses (for rate limiting)
 app.set('trust proxy', 1);
+
+// Initialize Socket.io
+initializeSocket(httpServer);
+
+// Initialize Email Service
+initializeEmailService();
 
 
 
@@ -69,9 +80,10 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`   API: http://localhost:${PORT}/api`);
-  console.log(`   Health: http://localhost:${PORT}/api/health\n`);
+  console.log(`   Health: http://localhost:${PORT}/api/health`);
+  console.log(`   Socket.io: Enabled\n`);
 });
 

@@ -1,20 +1,28 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import EmergencyNotification from '../components/EmergencyNotification';
+import { useSocket } from '../context/SocketContext';
+import { getLocationName } from '../data/campusLocations';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const Admin = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('incidents');
+  const location = useLocation();
+  const { socket } = useSocket();
+  const [activeTab, setActiveTab] = useState('emergencies');
   const [incidents, setIncidents] = useState([]);
+  const [emergencyAlerts, setEmergencyAlerts] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentNotification, setCurrentNotification] = useState(null);
   const [stats, setStats] = useState({
     totalIncidents: 0,
     pendingIncidents: 0,
     totalAnnouncements: 0,
+    activeEmergencies: 0,
   });
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -36,26 +44,76 @@ const Admin = () => {
       return;
     }
     fetchData();
-  }, [navigate]);
+    
+    // Check if navigating from emergency notification
+    if (location.state?.emergencyAlertId) {
+      setActiveTab('emergencies');
+    }
+  }, [navigate, location]);
+
+  // Listen for real-time emergency alerts
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewEmergency = (alert) => {
+      console.log('🚨 New emergency alert received:', alert);
+      setCurrentNotification(alert);
+      // Refresh emergency alerts list
+      fetchEmergencyAlerts();
+    };
+
+    const handleEmergencyUpdate = ({ alertId, status }) => {
+      setEmergencyAlerts(prev =>
+        prev.map(alert =>
+          alert._id === alertId ? { ...alert, status } : alert
+        )
+      );
+      fetchEmergencyAlerts();
+    };
+
+    socket.on('new-emergency', handleNewEmergency);
+    socket.on('emergency-updated', handleEmergencyUpdate);
+
+    return () => {
+      socket.off('new-emergency', handleNewEmergency);
+      socket.off('emergency-updated', handleEmergencyUpdate);
+    };
+  }, [socket]);
 
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
   });
 
+  const fetchEmergencyAlerts = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/emergency`, getAuthHeaders());
+      setEmergencyAlerts(res.data);
+      const activeCount = res.data.filter(a => a.status === 'active' || a.status === 'investigating').length;
+      setStats(prev => ({ ...prev, activeEmergencies: activeCount }));
+    } catch (err) {
+      console.error('Failed to fetch emergency alerts:', err);
+    }
+  };
+
   const fetchData = async () => {
     try {
-      const [incidentsRes, announcementsRes] = await Promise.all([
+      const [incidentsRes, announcementsRes, emergenciesRes] = await Promise.all([
         axios.get(`${API_URL}/incidents`, getAuthHeaders()),
         axios.get(`${API_URL}/announcements`, getAuthHeaders()),
+        axios.get(`${API_URL}/emergency`, getAuthHeaders()),
       ]);
       
       setIncidents(incidentsRes.data);
       setAnnouncements(announcementsRes.data);
+      setEmergencyAlerts(emergenciesRes.data);
+      
+      const activeEmergencies = emergenciesRes.data.filter(a => a.status === 'active' || a.status === 'investigating').length;
       
       setStats({
         totalIncidents: incidentsRes.data.length,
         pendingIncidents: incidentsRes.data.filter(i => i.status === 'pending').length,
         totalAnnouncements: announcementsRes.data.length,
+        activeEmergencies,
       });
     } catch (err) {
       console.error('Failed to fetch data:', err);
@@ -282,6 +340,18 @@ const Admin = () => {
         </div>
 
         <div className="stats-grid">
+          <div className="stat-card" style={{ borderLeft: '4px solid #ff4757' }}>
+            <div className="stat-icon" style={{ color: '#ff4757' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                <path d="M12 8v4M12 16h.01" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div className="stat-info">
+              <span className="stat-value" style={{ color: '#ff4757' }}>{stats.activeEmergencies}</span>
+              <span className="stat-label">Active Emergencies</span>
+            </div>
+          </div>
           <div className="stat-card">
             <div className="stat-icon incidents">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -323,7 +393,25 @@ const Admin = () => {
           </div>
         </div>
 
+        {currentNotification && (
+          <EmergencyNotification
+            alert={currentNotification}
+            onDismiss={() => setCurrentNotification(null)}
+          />
+        )}
+
         <div className="tabs">
+          <button
+            className={`tab ${activeTab === 'emergencies' ? 'active' : ''}`}
+            onClick={() => setActiveTab('emergencies')}
+            style={activeTab === 'emergencies' ? { borderColor: '#ff4757', color: '#ff4757' } : {}}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+              <path d="M12 8v4M12 16h.01" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Emergency Alerts ({emergencyAlerts.filter(a => a.status === 'active' || a.status === 'investigating').length})
+          </button>
           <button
             className={`tab ${activeTab === 'incidents' ? 'active' : ''}`}
             onClick={() => setActiveTab('incidents')}
@@ -360,7 +448,107 @@ const Admin = () => {
         )}
 
         <div className="table-container animate-fade-in">
-          {activeTab === 'incidents' ? (
+          {activeTab === 'emergencies' ? (
+            emergencyAlerts.length === 0 ? (
+              <div className="empty-state">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                </svg>
+                <h3>No emergency alerts</h3>
+                <p>Emergency alerts will appear here when triggered</p>
+              </div>
+            ) : (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                    <th>Description</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emergencyAlerts.map((alert) => {
+                    const getStatusBadge = (status) => {
+                      const badges = {
+                        active: { label: 'NEW', color: '#ff4757' },
+                        investigating: { label: 'IN PROGRESS', color: '#ff6b35' },
+                        resolved: { label: 'RESOLVED', color: '#26de81' },
+                        false_alarm: { label: 'FALSE ALARM', color: '#718096' },
+                      };
+                      return badges[status] || badges.active;
+                    };
+                    const statusBadge = getStatusBadge(alert.status);
+                    const locationName = alert.location?.locationId
+                      ? getLocationName(alert.location.locationId)
+                      : alert.location?.building || 'Unknown Location';
+                    const emergencyTypeLabels = {
+                      medical: 'Medical Emergency',
+                      fire: 'Fire',
+                      security: 'Security Threat',
+                      natural_disaster: 'Natural Disaster',
+                      other: 'Other Emergency',
+                    };
+                    return (
+                      <tr key={alert._id} style={{ borderLeft: `4px solid ${statusBadge.color}` }}>
+                        <td>
+                          <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
+                            {emergencyTypeLabels[alert.emergencyType] || alert.emergencyType}
+                          </span>
+                        </td>
+                        <td>{locationName}</td>
+                        <td>
+                          <span
+                            className="badge"
+                            style={{
+                              background: statusBadge.color,
+                              color: 'white',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {statusBadge.label}
+                          </span>
+                        </td>
+                        <td>{new Date(alert.timestamp).toLocaleString()}</td>
+                        <td>
+                          <div className="cell-subtitle">
+                            {alert.description || 'No description'}
+                          </div>
+                        </td>
+                        <td>
+                          <select
+                            value={alert.status}
+                            onChange={async (e) => {
+                              try {
+                                await axios.patch(
+                                  `${API_URL}/emergency/${alert._id}`,
+                                  { status: e.target.value },
+                                  getAuthHeaders()
+                                );
+                                fetchEmergencyAlerts();
+                              } catch (err) {
+                                console.error('Failed to update emergency status:', err);
+                                alert('Failed to update status');
+                              }
+                            }}
+                            className="status-select"
+                            style={{ borderColor: statusBadge.color }}
+                          >
+                            <option value="active">NEW</option>
+                            <option value="investigating">IN PROGRESS</option>
+                            <option value="resolved">RESOLVED</option>
+                            <option value="false_alarm">FALSE ALARM</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )
+          ) : activeTab === 'incidents' ? (
             incidents.length === 0 ? (
             <div className="empty-state">
               <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
