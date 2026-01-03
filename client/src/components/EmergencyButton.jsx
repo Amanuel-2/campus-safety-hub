@@ -3,10 +3,65 @@ import EmergencyModal from './EmergencyModal';
 
 const EmergencyButton = ({ variant = 'floating' }) => {
   const [showModal, setShowModal] = useState(false);
+  const [location, setLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const handleEmergencyClick = () => {
-    // Open modal - user will select location from campus map
-    setShowModal(true);
+    // Start location capture immediately when button is clicked
+    // This is the MAIN FEATURE: automatic location capture without manual intervention
+    setLocationLoading(true);
+    
+    if (navigator.geolocation) {
+      // Request location with high accuracy settings
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const capturedLocation = { lat: latitude, lng: longitude };
+          console.log('✅ Location captured automatically:', capturedLocation);
+          setLocation(capturedLocation);
+          setLocationLoading(false);
+          // Open modal after location is captured
+          setShowModal(true);
+        },
+        (err) => {
+          // Handle different error types
+          let errorMsg = 'Unknown error';
+          switch(err.code) {
+            case err.PERMISSION_DENIED:
+              errorMsg = 'Location permission denied by user';
+              break;
+            case err.POSITION_UNAVAILABLE:
+              errorMsg = 'Location information unavailable';
+              break;
+            case err.TIMEOUT:
+              errorMsg = 'Location request timed out';
+              break;
+            default:
+              errorMsg = 'Location capture failed';
+              break;
+          }
+          console.warn('⚠️ Geolocation error:', errorMsg, err);
+          // Still allow emergency alert even if location capture fails
+          // Location will be null but alert can still be sent
+          setLocation(null);
+          setLocationLoading(false);
+          // Open modal even if location capture failed
+          setShowModal(true);
+        },
+        {
+          enableHighAccuracy: true, // Use GPS if available
+          timeout: 10000, // 10 second timeout
+          maximumAge: 0, // Always get fresh location, don't use cached
+        }
+      );
+    } else {
+      // Geolocation not supported by browser
+      console.warn('⚠️ Geolocation API not supported by browser');
+      setLocation(null);
+      setLocationLoading(false);
+      // Still allow emergency alert
+      setShowModal(true);
+    }
   };
 
   return (
@@ -15,6 +70,7 @@ const EmergencyButton = ({ variant = 'floating' }) => {
         className={`emergency-button ${variant === 'hero' ? 'emergency-button-hero' : ''}`}
         onClick={handleEmergencyClick}
         aria-label="Emergency Alert"
+        disabled={locationLoading}
       >
         <div className="emergency-button-content">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -32,10 +88,23 @@ const EmergencyButton = ({ variant = 'floating' }) => {
           isOpen={showModal}
           onClose={() => {
             setShowModal(false);
+            // Reset location state when modal closes
+            setLocation(null);
+            setLocationLoading(false);
           }}
+          initialLocation={location}
         />
       )}
       
+      {locationLoading && (
+        <div className="location-capture-overlay">
+          <div className="location-capture-message">
+            <span className="spinner" style={{ width: 24, height: 24 }} />
+            <span>Capturing your location...</span>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .emergency-button {
           position: fixed;
@@ -65,6 +134,43 @@ const EmergencyButton = ({ variant = 'floating' }) => {
           transform: scale(0.95);
         }
         
+        .emergency-button:disabled {
+          opacity: 0.7;
+          cursor: wait;
+        }
+        
+        .location-capture-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+          animation: fadeIn 0.2s ease-out;
+        }
+        
+        .location-capture-message {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: 1.5rem 2rem;
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          color: var(--text-primary);
+          font-weight: 500;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
         
         .emergency-button-content {
           display: flex;

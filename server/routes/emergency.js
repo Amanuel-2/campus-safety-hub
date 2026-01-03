@@ -23,19 +23,19 @@ const generateDeviceFingerprint = (req) => {
 router.post('/alert', emergencyAlertLimiter, async (req, res) => {
   try {
     const { 
-      locationId,
       building, 
       area, 
+      coordinates, 
       emergencyType, 
       description,
       contactInfo,
       campusToken // Optional - proves verified device
     } = req.body;
     
-    // LocationId is required
-    if (!locationId) {
+    // Location is required
+    if (!building) {
       return res.status(400).json({ 
-        message: 'Location selection is required for emergency alerts. Please select a location on the campus map.' 
+        message: 'Building location is required for emergency alerts' 
       });
     }
     
@@ -43,9 +43,9 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
     const alert = new EmergencyAlert({
       timestamp: new Date(),
       location: {
-        locationId: locationId.trim(),
-        building: building ? building.trim() : undefined,
+        building: building.trim(),
         area: area ? area.trim() : undefined,
+        coordinates: coordinates || undefined,
       },
       emergencyType: emergencyType || 'other',
       description: description ? description.trim() : undefined,
@@ -63,7 +63,7 @@ router.post('/alert', emergencyAlertLimiter, async (req, res) => {
     await alert.save();
     
     // Log for admin notification (in production, send real-time notification)
-    console.log(`🚨 EMERGENCY ALERT: ${alert._id} - Location: ${locationId} - ${emergencyType}`);
+    console.log(`🚨 EMERGENCY ALERT: ${alert._id} - ${building} - ${emergencyType}`);
     
     res.status(201).json({
       message: 'Emergency alert sent successfully',

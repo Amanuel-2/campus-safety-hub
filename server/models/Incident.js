@@ -41,10 +41,6 @@ const incidentSchema = new mongoose.Schema({
     enum: ['pending', 'investigating', 'resolved'],
     default: 'pending',
   },
-  locationId: {
-    type: String,
-    trim: true,
-  },
   location: {
     lat: { type: Number },
     lng: { type: Number },
@@ -74,7 +70,6 @@ const incidentSchema = new mongoose.Schema({
 incidentSchema.index({ status: 1, createdAt: -1 });
 incidentSchema.index({ type: 1 });
 incidentSchema.index({ severity: 1 });
-incidentSchema.index({ locationId: 1 });
 
 module.exports = mongoose.model('Incident', incidentSchema);
 

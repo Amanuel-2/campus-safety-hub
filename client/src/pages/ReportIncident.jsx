@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import Navbar from '../components/Navbar';
-import CampusMapPicker from '../components/CampusMapPicker';
+import MapPicker from '../components/MapPicker';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -11,7 +11,7 @@ const ReportIncident = () => {
         description: '',
         type: 'safety_concern',
         severity: 'medium',
-        locationId: null,
+        location: null,
         locationDescription: '',
         anonymous: true,
         reporterName: '',
@@ -49,10 +49,10 @@ const ReportIncident = () => {
         }));
     };
 
-    const handleLocationSelect = useCallback((locationData) => {
+    const handleLocationSelect = useCallback((location) => {
         setFormData(prev => ({
             ...prev,
-            locationId: locationData.locationId,
+            location: { lat: location.lat, lng: location.lng },
         }));
     }, []);
 
@@ -175,7 +175,7 @@ const ReportIncident = () => {
                 description: formData.description.trim(),
                 type: formData.type,
                 severity: formData.severity,
-                locationId: formData.locationId || null,
+                location: formData.location,
                 locationDescription: formData.locationDescription?.trim() || '',
                 anonymous: formData.anonymous,
                 reporterName: formData.anonymous ? '' : (formData.reporterName?.trim() || ''),
@@ -187,7 +187,7 @@ const ReportIncident = () => {
                 title: payload.title,
                 type: payload.type,
                 imagesCount: payload.images.length,
-                hasLocationId: !!payload.locationId,
+                hasLocation: !!payload.location,
             });
 
             const response = await axios.post(`${API_URL}/incidents`, payload, {
@@ -205,7 +205,7 @@ const ReportIncident = () => {
                 description: '',
                 type: 'safety_concern',
                 severity: 'medium',
-                locationId: null,
+                location: null,
                 locationDescription: '',
                 anonymous: true,
                 reporterName: '',
@@ -408,14 +408,8 @@ const ReportIncident = () => {
                         </h3>
 
                         <div className="form-group">
-                            <label className="form-label">Select Location on Campus Map (optional)</label>
-                            <CampusMapPicker 
-                                onLocationSelect={handleLocationSelect} 
-                                initialLocationId={formData.locationId}
-                            />
-                            <p className="form-hint">
-                                Select a building location from the campus map. This helps us locate the incident quickly.
-                            </p>
+                            <label className="form-label">Mark on Map</label>
+                            <MapPicker onLocationSelect={handleLocationSelect} />
                         </div>
 
                         <div className="form-group">

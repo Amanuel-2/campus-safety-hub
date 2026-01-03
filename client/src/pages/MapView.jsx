@@ -1,17 +1,51 @@
 import { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-leaflet';
 import Navbar from '../components/Navbar';
-import CampusMapView from '../components/CampusMapView';
 import axios from 'axios';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+// Custom marker icons
+const createIcon = (color) => new L.DivIcon({
+  className: 'custom-marker',
+  html: `
+    <div style="
+      width: 32px;
+      height: 32px;
+      background: ${color};
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      border: 3px solid white;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    ">
+      <div style="
+        width: 10px;
+        height: 10px;
+        background: white;
+        border-radius: 50%;
+        transform: rotate(45deg);
+      "></div>
+    </div>
+  `,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
+});
+
+const incidentIcon = createIcon('#ff4757');
+
 const MapView = () => {
   const [incidents, setIncidents] = useState([]);
-  const [emergencyAlerts, setEmergencyAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showIncidents, setShowIncidents] = useState(true);
-  const [showEmergencies, setShowEmergencies] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
+
+  const defaultCenter = [9.0305, 38.7633];
 
   useEffect(() => {
     fetchData();
@@ -19,12 +53,8 @@ const MapView = () => {
 
   const fetchData = async () => {
     try {
-      const [incidentsRes, emergenciesRes] = await Promise.all([
-        axios.get(`${API_URL}/incidents`),
-        axios.get(`${API_URL}/emergency`),
-      ]);
+      const incidentsRes = await axios.get(`${API_URL}/incidents`);
       setIncidents(incidentsRes.data);
-      setEmergencyAlerts(emergenciesRes.data || []);
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {
@@ -32,18 +62,17 @@ const MapView = () => {
     }
   };
 
-  const handleMarkerClick = ({ locationId, items }) => {
-    if (items && items.length > 0) {
-      setSelectedItem({
-        locationId,
-        type: items[0].emergencyType ? 'emergency' : 'incident',
-        items,
-      });
-    }
+  const getSeverityColor = (severity) => {
+    const colors = {
+      low: 'var(--accent-success)',
+      medium: 'var(--accent-warning)',
+      high: 'var(--accent-primary)',
+      critical: 'var(--accent-danger)',
+    };
+    return colors[severity] || colors.medium;
   };
 
-  const filteredIncidents = showIncidents ? incidents : [];
-  const filteredEmergencies = showEmergencies ? emergencyAlerts : [];
+  const incidentsWithLocation = incidents.filter(i => i.location?.lat && i.location?.lng);
 
   return (
     <div className="app-container">
@@ -60,25 +89,13 @@ const MapView = () => {
             <label className="layer-toggle">
               <input
                 type="checkbox"
-                checked={showEmergencies}
-                onChange={(e) => setShowEmergencies(e.target.checked)}
-              />
-              <span className="toggle-indicator emergencies" />
-              <span className="toggle-text">
-                Emergency Alerts
-                <span className="count">{emergencyAlerts.length}</span>
-              </span>
-            </label>
-            <label className="layer-toggle">
-              <input
-                type="checkbox"
                 checked={showIncidents}
                 onChange={(e) => setShowIncidents(e.target.checked)}
               />
               <span className="toggle-indicator incidents" />
               <span className="toggle-text">
                 Incidents
-                <span className="count">{incidents.length}</span>
+                <span className="count">{incidentsWithLocation.length}</span>
               </span>
             </label>
           </div>
@@ -87,24 +104,8 @@ const MapView = () => {
             <h3>Legend</h3>
             <div className="legend-items">
               <div className="legend-item">
-                <span className="legend-dot emergency" />
-                Emergency Alerts
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot" style={{ background: '#26de81' }} />
-                Low Severity
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot" style={{ background: '#ffd53d' }} />
-                Medium Severity
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot" style={{ background: '#ff6b35' }} />
-                High Severity
-              </div>
-              <div className="legend-item">
                 <span className="legend-dot" style={{ background: '#ff4757' }} />
-                Critical Severity
+                Incidents
               </div>
             </div>
           </div>
@@ -117,43 +118,26 @@ const MapView = () => {
               </div>
             ) : (
               <div className="activity-list">
-                {[
-                  ...emergencyAlerts.map(a => ({ ...a, type: 'emergency', title: `Emergency: ${a.emergencyType}` })),
-                  ...incidents.map(i => ({ ...i, type: 'incident' })),
-                ]
-                  .sort((a, b) => new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp))
-                  .slice(0, 10)
-                  .map((item) => (
+                {incidents
+                  .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                  .slice(0, 5)
+                  .map((item, index) => (
                     <div
                       key={item._id}
-                      className={`activity-item ${selectedItem?.locationId && selectedItem.items?.some(i => i._id === item._id) ? 'active' : ''}`}
-                      onClick={() => {
-                        if (item.type === 'emergency') {
-                          setSelectedItem({
-                            locationId: item.location?.locationId,
-                            type: 'emergency',
-                            items: [item],
-                          });
-                        } else {
-                          setSelectedItem({
-                            locationId: item.locationId,
-                            type: 'incident',
-                            items: [item],
-                          });
-                        }
-                      }}
+                      className={`activity-item ${selectedItem?._id === item._id ? 'active' : ''}`}
+                      onClick={() => setSelectedItem(item)}
                     >
                       <div
                         className="activity-indicator"
                         style={{
-                          background: item.type === 'emergency' ? '#ff4757' : '#ff6b35',
+                          background: '#ff4757',
                         }}
                       />
                       <div className="activity-content">
                         <span className="activity-title">{item.title}</span>
                         <span className="activity-meta">
-                          {item.type === 'emergency' ? 'Emergency' : 'Incident'} •{' '}
-                          {new Date(item.createdAt || item.timestamp).toLocaleDateString()}
+                          Incident •{' '}
+                          {new Date(item.createdAt).toLocaleDateString()}
                         </span>
                       </div>
                     </div>
@@ -161,31 +145,6 @@ const MapView = () => {
               </div>
             )}
           </div>
-          
-          {selectedItem && (
-            <div className="selected-item-details">
-              <h3>Details</h3>
-              {selectedItem.items?.map((item) => (
-                <div key={item._id} className="detail-card">
-                  <div className="detail-header">
-                    <span className="detail-type">{item.type === 'emergency' ? 'Emergency' : 'Incident'}</span>
-                    <span className="detail-date">
-                      {new Date(item.createdAt || item.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                  <h4 className="detail-title">{item.title || `Emergency: ${item.emergencyType}`}</h4>
-                  {item.description && (
-                    <p className="detail-description">{item.description}</p>
-                  )}
-                  {item.location?.locationId && (
-                    <p className="detail-location">
-                      📍 Location: {item.location.locationId}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="map-container">
@@ -194,12 +153,48 @@ const MapView = () => {
               <div className="spinner" />
             </div>
           ) : (
-            <CampusMapView
-              incidents={filteredIncidents}
-              emergencyAlerts={filteredEmergencies}
-              onMarkerClick={handleMarkerClick}
-              selectedItem={selectedItem}
-            />
+            <MapContainer
+              center={defaultCenter}
+              zoom={15}
+              style={{ height: '100%', width: '100%' }}
+              zoomControl={false}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+
+              {showIncidents &&
+                incidentsWithLocation.map((incident) => (
+                  <Marker
+                    key={incident._id}
+                    position={[incident.location.lat, incident.location.lng]}
+                    icon={incidentIcon}
+                  >
+                    <Popup>
+                      <div className="popup-content">
+                        <div className="popup-header">
+                          <span
+                            className="popup-badge"
+                            style={{ background: getSeverityColor(incident.severity) }}
+                          >
+                            {incident.severity}
+                          </span>
+                          <span className="popup-type">{incident.type.replace('_', ' ')}</span>
+                        </div>
+                        <h4 className="popup-title">{incident.title}</h4>
+                        <p className="popup-desc">{incident.description}</p>
+                        {incident.locationDescription && (
+                          <p className="popup-location">📍 {incident.locationDescription}</p>
+                        )}
+                        <p className="popup-date">
+                          {new Date(incident.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+            </MapContainer>
           )}
         </div>
       </div>
@@ -272,26 +267,17 @@ const MapView = () => {
           transition: all 0.2s ease;
         }
         
-        .toggle-indicator.emergencies {
-          background: rgba(255, 71, 87, 0.3);
-        }
-        
         .toggle-indicator.incidents {
-          background: rgba(255, 107, 53, 0.3);
+          background: rgba(255, 71, 87, 0.3);
         }
         
         .layer-toggle input:checked + .toggle-indicator {
           border-color: currentColor;
         }
         
-        .layer-toggle input:checked + .toggle-indicator.emergencies {
+        .layer-toggle input:checked + .toggle-indicator.incidents {
           background: #ff4757;
           border-color: #ff4757;
-        }
-        
-        .layer-toggle input:checked + .toggle-indicator.incidents {
-          background: #ff6b35;
-          border-color: #ff6b35;
         }
         
         .toggle-text {
